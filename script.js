@@ -29,6 +29,7 @@ function processData(json) {
   }
 
   let rowSelected = rows[0];
+  rowSelected = rows[rows.length - 1];
   const timeTag = rowSelected[idxTime];
   const density = rowSelected[idxDensity];
   const speed = rowSelected[idxSpeed];
