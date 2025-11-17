@@ -1,57 +1,154 @@
-const url = 'https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json';
-
-async function fetchData() {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Errore nel recupero dati: ' + response.status);
+// Utility: pulisce e converte il JSON NOAA (salta eventuale header)
+  function parseNoaaJson(raw) {
+    const rows = Array.isArray(raw) ? raw.slice() : [];
+    // Se la prima riga è intestazione (contiene stringhe come "time_tag"), salta la prima
+    if (rows.length && Array.isArray(rows[0])) {
+      const first = rows[0][0];
+      if (typeof first === 'string' && isNaN(Date.parse(first))) {
+        // Probabilmente header -> rimuovi
+        rows.shift();
+      }
     }
-    const data = await response.json();
-    processData(data);
-  } catch (err) {
-    document.getElementById('info').innerHTML = `<p style="color:red;">${err.message}</p>`;
-  }
-}
-
-function processData(json) {
-  const header = json[0];
-  const rows = json.slice(1);
-
-  const idxTime = header.indexOf('time_tag');
-  const idxDensity = header.indexOf('density');
-  const idxSpeed = header.indexOf('speed');
-  const idxTemp = header.indexOf('temperature');
-
-  
-  if (!rows[0]) {
-    document.getElementById('info').innerHTML = "<p>Nessun dato trovato.</p>";
-    return;
+    return rows;
   }
 
-  let rowSelected = rows[0];
-  rowSelected = rows[rows.length - 1];
-  const timeTag = rowSelected[idxTime];
-  const density = rowSelected[idxDensity];
-  const speed = rowSelected[idxSpeed];
-  const temperature = rowSelected[idxTemp];
+  // Filtra punti non validi e ritorna array di oggetti {t: Date, density, speed, temp}
+  function extractPoints(rows) {
+    const pts = [];
+    for (const r of rows) {
+      const timestr = r[0];
+      const t = new Date(timestr);
+      if (isNaN(t)) continue;
 
-  const infoEl = document.getElementById('info');
-  infoEl.innerHTML = `
-    <table>
-      <tr><th>Parametro</th><th>Valore</th></tr>
-      <tr><td>Time Tag (≈ un’ora fa)</td><td>${timeTag}</td></tr>
-      <tr><td>Densità (protoni/cm³)</td><td>${density}</td></tr>
-      <tr><td>Velocità (km/s)</td><td>${speed}</td></tr>
-      <tr><td>Temperatura (K)</td><td>${temperature}</td></tr>
-    </table>
-  `;
+      // i campi possono essere stringhe; converti a number e filtra valori non numerici
+      const dens = Number(r[1]);
+      const spd  = Number(r[2]);
+      const tmp  = Number(r[3]);
 
-  document.getElementById('updateTime').textContent = timeTag;
-}
+      // accetta anche se qualche valore è NaN (lo terremo fuori per quel grafico)
+      pts.push({
+        t,
+        density: Number.isFinite(dens) ? dens : null,
+        speed:   Number.isFinite(spd)  ? spd  : null,
+        temp:    Number.isFinite(tmp)  ? tmp  : null
+      });
+    }
+    // Assicurati che siano ordinati per tempo
+    pts.sort((a,b) => a.t - b.t);
+    return pts;
+  }
 
-// Avvio
-fetchData();
+  // Interpolazione lineare: input x (ms timestamps) e y (numeric), newX (ms)
+  function linearInterpolate(x, y, newX) {
+    const newY = [];
+    if (x.length < 2) return newX.map(() => NaN);
 
-// (Aggiorna ogni 5 minuti)
-setInterval(fetchData, 0.5*60*1000);
+    let j = 0;
+    for (let i = 0; i < newX.length; i++) {
+      const xi = newX[i];
+      // sposta j così che xi sia tra x[j] e x[j+1]
+      while (j < x.length - 2 && xi > x[j + 1]) j++;
+      const x0 = x[j], x1 = x[j+1];
+      const y0 = y[j], y1 = y[j+1];
 
+      // se uno dei due y è null/NaN -> risultato null
+      if (!Number.isFinite(y0) || !Number.isFinite(y1) || x1 === x0) {
+        newY.push(NaN);
+        continue;
+      }
+
+      const t = (xi - x0) / (x1 - x0);
+      newY.push(y0 + t * (y1 - y0));
+    }
+    return newY;
+  }
+
+  // Costruisce chart con Chart.js; dataPoints = array di {x: Date, y: number}
+  function buildChart(canvasId, label, dataPoints, yLabel) {
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    return new Chart(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label,
+          data: dataPoints,
+          parsing: false, // usiamo oggetti {x, y}
+          showLine: true,
+          pointRadius: 0.8,
+          borderWidth: 1.5,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              tooltipFormat: 'yyyy-MM-dd HH:mm',
+              displayFormats: { hour: 'HH:mm', day: 'yyyy-MM-dd' }
+            },
+            title: { display: true, text: 'Time (UTC)' }
+          },
+          y: {
+            beginAtZero: false,
+            title: { display: true, text: yLabel }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index', intersect: false }
+        }
+      }
+    });
+  }
+
+  async function fetchAndDraw() {
+    try {
+      const url = 'https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json';
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('Errore fetch: ' + resp.status);
+      const raw = await resp.json();
+
+      const rows = parseNoaaJson(raw);
+      const pts = extractPoints(rows);
+
+      if (pts.length === 0) throw new Error('Nessun punto valido trovato nel JSON.');
+
+      // Costruisci i vettori temporali e vettori per ogni variabile (NaN per mancate letture)
+      const timesMs = pts.map(p => p.t.getTime());
+      const densityArr = pts.map(p => p.density);
+      const speedArr = pts.map(p => p.speed);
+      const tempArr = pts.map(p => p.temp);
+
+      // Nuovo asse regolare (200 punti)
+      const numPoints = 300;
+      const minT = timesMs[0], maxT = timesMs[timesMs.length - 1];
+      const newX = [];
+      for (let i = 0; i < numPoints; i++) newX.push(minT + (i/(numPoints-1))*(maxT-minT));
+
+      const densityInterp = linearInterpolate(timesMs, densityArr, newX);
+      const speedInterp   = linearInterpolate(timesMs, speedArr,   newX);
+      const tempInterp    = linearInterpolate(timesMs, tempArr,    newX);
+
+      // Converti in array {x: Date, y: value} e rimuovi NaN finali (Chart.js può gestire NaN ma meglio filtrarli)
+      const densityPoints = newX.map((nx,i) => ({ x: new Date(nx), y: Number.isFinite(densityInterp[i]) ? densityInterp[i] : null }))
+                                  .filter(p => p.y !== null);
+      const speedPoints   = newX.map((nx,i) => ({ x: new Date(nx), y: Number.isFinite(speedInterp[i]) ? speedInterp[i] : null }))
+                                  .filter(p => p.y !== null);
+      const tempPoints    = newX.map((nx,i) => ({ x: new Date(nx), y: Number.isFinite(tempInterp[i]) ? tempInterp[i] : null }))
+                                  .filter(p => p.y !== null);
+
+      // Costruisci i grafici
+      buildChart('chart-temp', 'Temperature (K)', tempPoints, 'K');
+      buildChart('chart-speed', 'Velocity (km/s)', speedPoints, 'km/s');
+      buildChart('chart-density', 'Density (protoni/cm³)', densityPoints, 'protoni/cm³');
+
+    } catch (err) {
+      console.error('Errore:', err);
+      alert('Errore nel caricamento/disegno: ' + err.message + '. Controlla console.');
+    }
+  }
+
+  // Avvia
+  fetchAndDraw();
