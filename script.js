@@ -416,82 +416,61 @@ if (playPauseBtn) {
 ============================================================ */
 
 function drawVerticalKeyboard() {
-    const canvas = document.getElementById("keyboardCanvas");
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-
-    // Resize retina
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * 2;
-    canvas.height = rect.height * 2;
-    ctx.scale(2, 2);
-
-    const w = rect.width;
-    const h = rect.height;
-
-    const octaves = 2;
-    const whitePerOctave = 7;
-    const totalWhite = octaves * whitePerOctave;
-
-    const whiteKeyHeight = 10; // verticale
-    const whiteKeyWidth = w * 0.2;
-
-    const blackKeyWidth = whiteKeyWidth * 0.6;
+    const keyboard = document.createElement('div');
+    const box = document.querySelector('.keyboard-box');
+    box.appendChild(keyboard);
+    keyboard.classList.add('verticalKeyboardContainer');
+    keyboard.id = 'verticalKeyboard';
+    
+    const whiteKeyHeight = 5;
     const blackKeyHeight = whiteKeyHeight * 0.6;
 
-    const blackPattern = ["A#", null, "C#", "D#", null, "F#", "G#"]; 
-    // Mappa su tasti A B C D E F G
-
-    // *** Disegna tasti bianchi ***
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 1;
-
-    let posY = 0;
-    let whiteKeyPositions = [];
-
-    for (let o = 0; o < octaves; o++) {
-        for (let i = 0; i < 7; i++) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, posY, whiteKeyWidth, whiteKeyHeight);
-            ctx.strokeRect(0, posY, whiteKeyWidth, whiteKeyHeight);
-
-            whiteKeyPositions.push({ 
-                y: posY, 
-                note: ["A","B","C","D","E","F","G"][i] + (o + 3) 
-            });
-
-            posY += whiteKeyHeight;
-        }
-    }
-
-    // *** Disegna tasti neri ***
-    ctx.fillStyle = "#000";
-
-    posY = 0;
-    for (let o = 0; o < octaves; o++) {
-        for (let i = 0; i < 7; i++) {
-            const noteSharp = blackPattern[i];
-            if (!noteSharp) {
-                posY += whiteKeyHeight;
-                continue;
-            }
-
-            const blackY = posY + whiteKeyHeight * 0.6;
-
-            ctx.fillRect(0, blackY, blackKeyWidth, blackKeyHeight);
-            posY += whiteKeyHeight;
-        }
+    const octaves = 3;
+    for(let o = 0; o < octaves ; o++) {
+        let key = createWhiteKey();
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createBlackKey());
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createBlackKey());
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createBlackKey());
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createBlackKey());
+        keyboard.appendChild(createWhiteKey());
+        keyboard.appendChild(createBlackKey());
+        keyboard.appendChild(createWhiteKey());
     }
 }
 
+function createWhiteKey() {
+    const key = document.createElement('div');
+    key.classList.add('whiteKey');
+    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
+    }
+    return key;    
+}
+
+function createBlackKey() {
+    const key = document.createElement('div');
+    key.classList.add('blackKey');
+    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
+    }
+    return key;    
+}
+
+function highlightKey(i) {
+    const keyboard = document.getElementById('verticalKeyboard');
+    const keys = keyboard.children;
+    keys[i].classList.toggle('selectedKey');
+}
+
+
 // Disegno al load
-window.addEventListener("load", drawVerticalKeyboard);
-window.addEventListener("resize", drawVerticalKeyboard);
-
-
+drawVerticalKeyboard();
 
 // Avviare l'aggiornamento dei grafici ogni 60s (resta manuale l'evidenziazione)
 updateCharts();
 setInterval(updateCharts, 60_000);
+
+highlightKey(1); // evidenzia la prima nota all'inizio
