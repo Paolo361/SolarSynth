@@ -61,7 +61,6 @@
         box-shadow: 0 8px 24px rgba(15,23,42,0.06);
         border: none;
         border-radius: 12px;
-        border: 5px solid #FFFCF0;
 
         padding: 0px;
     }
@@ -255,8 +254,8 @@ function createChart(canvasId, color) {
         data: {
             datasets: [{
                 borderColor: color,
-                borderWidth: 2.5,
-                tension: 0.42,
+                borderWidth: 1.5,
+                tension: 0.43,
                 fill: true,
                 backgroundColor: (ctx) => {
                     const chart = ctx.chart;
@@ -280,7 +279,7 @@ function createChart(canvasId, color) {
             animation: false,
             interaction: { mode: 'nearest', intersect: false },
             maintainAspectRatio: false,
-            layout: { padding: 0 },
+            layout: { padding: 10 },
 
             scales: {
                 x: {
@@ -453,6 +452,8 @@ function updateHighlightRender() {
     chartVel.update("none");
 }
 
+let realHighlightIndex = -1;
+
 function advanceHighlight() {
     const len = chartTemp.data.datasets[0].data.length;
     if (!len) return;
@@ -462,6 +463,7 @@ function advanceHighlight() {
         next = (next + 1) % len;
         if (isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
             highlightIndex = next;
+            realHighlightIndex = next;
             console.log("Temp: ", chartTemp.data.datasets[0].data[highlightIndex].y);
             updateHighlightRender();
             return;
@@ -470,6 +472,7 @@ function advanceHighlight() {
 
     // nessun punto valido trovato
     highlightIndex = -1;
+    realHighlightIndex = -1;
     updateHighlightRender();
 }
 
@@ -480,6 +483,7 @@ function startHighlighting(speedMs = 500) {
 
     // se i dati non sono ancora pronti, aspetta un po' e poi avvia
     if (!chartTemp.data.datasets[0].data.length) {
+        realHighlightIndex = -1;
         highlightIndex = -1;
         highlightTimer = setInterval(() => {
             if (chartTemp.data.datasets[0].data.length) {
@@ -490,14 +494,13 @@ function startHighlighting(speedMs = 500) {
         return;
     }
 
-    highlightIndex = -1; // iniziare prima del primo
+    highlightIndex = realHighlightIndex; // iniziare prima del primo
     highlightTimer = setInterval(advanceHighlight, highlightSpeed);
     advanceHighlight(); // mostra subito il primo
 }
 
 function stopHighlighting() {
     if (highlightTimer) { clearInterval(highlightTimer); highlightTimer = null; }
-    highlightIndex = -1;
     updateHighlightRender();
 }
 
