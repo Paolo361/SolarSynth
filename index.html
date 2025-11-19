@@ -1,31 +1,50 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
-  <title>Solar Wind - Grafici interpolati</title>
-
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- Date adapter per Chart.js (date-fns) -->
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<meta charset="UTF-8">
+<title>Sun Synth – Solar Wind Realtime Charts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<link rel="stylesheet" href="style.css">
 </head>
+
 <body>
-  <h1>Solar Wind — interpolazione (1 day)</h1>
 
-  <div class="chart-wrap">
-    <h3>Temperatura (K)</h3>
-    <canvas id="chart-temp"></canvas>
-  </div>
+<div class="main-box">
 
-  <div class="chart-wrap">
-    <h3>Velocità (km/s)</h3>
-    <canvas id="chart-speed"></canvas>
-  </div>
+    <div class="controls">
+        <label for="speedKnob">Velocità highlight:</label>
+        <input id="speedKnob" type="range" min="5" max="200" step="1" value="50">
+        <span id="speedValue"></span>
+        <button id="playPauseBtn">Play</button>
+    </div>
 
-  <div class="chart-wrap">
-    <h3>Densità (protoni / cm³)</h3>
-    <canvas id="chart-density"></canvas>
-  </div>  
-  <script src="script.js"></script>
+    <div class="top-charts">
+
+        <div class="chart-box">
+            <canvas id="chartTemp"></canvas>
+            <div class="chart-label">TEMPERATURA</div>
+        </div>
+
+        <div class="chart-box">
+            <canvas id="chartDens"></canvas>
+            <div class="chart-label">DENSITÀ</div>
+        </div>
+
+        <div class="chart-box">
+            <canvas id="chartVel"></canvas>
+            <div class="chart-label">VELOCITÀ</div>
+        </div>
+
+    </div>
+
+</div>
+
+<script src = "script.js"></script>
+
 </body>
 </html>
