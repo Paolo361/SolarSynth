@@ -445,7 +445,8 @@ function drawVerticalKeyboard() {
 
 function createWhiteKey() {
     const key = document.createElement('div');
-    key.classList.add('whiteKey');
+    key.classList.add('key');
+    key.classList.add('white');
     key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
     }
     return key;    
@@ -453,7 +454,7 @@ function createWhiteKey() {
 
 function createBlackKey() {
     const key = document.createElement('div');
-    key.classList.add('blackKey');
+    key.classList.add('key');
     key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
     }
     return key;    
