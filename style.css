@@ -79,6 +79,34 @@
     }
     .controls input[type="range"] { width: 220px; }
 
+    .keyboard-box {
+        width: 33%;
+        height: 300px;
+        margin-top: 40px;
+        background: #0f172a;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        position: relative;
+        overflow-y: auto;        /* ← aggiungi questo */
+        overflow-x: hidden;
+
+    }
+
+    #keyboardCanvas {
+        width: 20px;
+        height: 0px;
+    }
+
+    .chart-label {
+        text-align: center;
+        font-family: "Space Mono", monospace;
+        font-size: 12px;
+        opacity: 0.7;
+        margin-top: 6px;
+    }
+
+
     #speedValue {
         width: 70px;
         color: #FFFCF0;

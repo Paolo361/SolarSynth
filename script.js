@@ -3,25 +3,15 @@
 ============================================================ */
 function interpolateLinear(xs, ys, newXs) {
     const out = [];
-    let j = 0;
-
     for (let i = 0; i < newXs.length; i++) {
         const x = newXs[i];
-
-        while (j < xs.length - 2 && x > xs[j+1]) j++;
-
-        const x0 = xs[j];
-        const x1 = xs[j+1];
-        const y0 = ys[j];
-        const y1 = ys[j+1];
-
-        if (!Number.isFinite(y0) || !Number.isFinite(y1)) {
-            out.push(null);
-            continue;
-        }
-
+        let j = 0;
+        while (j < xs.length - 2 && x > xs[j + 1]) j++;
+        const x0 = xs[j], x1 = xs[j + 1];
+        const y0 = ys[j], y1 = ys[j + 1];
+        // Linear interpolation
         const t = (x - x0) / (x1 - x0);
-        out.push(y0 + t * (y1 - y0));
+        out.push(y0 * (1 - t) + y1 * t);
     }
     return out;
 }
@@ -213,6 +203,7 @@ const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
 const chartVel  = createChart("chartVel",  "green");
 
+
 chartTemp.data.datasets[0].label = "Temperatura";
 chartDens.data.datasets[0].label = "Densità";
 chartVel.data.datasets[0].label  = "Velocità";
@@ -269,19 +260,32 @@ async function updateCharts() {
 
         pts.sort((a,b) => a.t - b.t);
 
-        const xs   = pts.map(p => p.t.getTime());
-        const dens = pts.map(p => p.dens);
-        const vel  = pts.map(p => p.vel);
-        const temp = pts.map(p => p.temp);
 
-        // Interpolazione su 300 punti
+
+        // --- FILTRA SOLO GLI ULTIMI 60 MINUTI DEI DATI DISPONIBILI ---
+        const ONE_HOUR = 60 * 60 * 1000;
+        const maxTime = pts.length ? pts[pts.length - 1].t.getTime() : Date.now();
+        const ptsUsed = pts.filter(p => p.t.getTime() >= maxTime - ONE_HOUR);
+
+
+
+        const xs   = ptsUsed.map(p => p.t.getTime());
+        const dens = ptsUsed.map(p => p.dens);
+        const vel  = ptsUsed.map(p => p.vel);
+        const temp = ptsUsed.map(p => p.temp);
+
+        // Interpolazione su 300 punti, clamp minX/maxX ai valori validi
         const NUM = 300;
-        const minX = xs[0];
-        const maxX = xs[xs.length - 1];
+        let minX = Math.min(...xs);
+        let maxX = Math.max(...xs);
+        // Evita minX == maxX (singolo punto)
+        if (minX === maxX) maxX = minX + 1;
+        // Genera newXs solo nel range dei dati
         const newXs = Array.from({length: NUM}, (_, i) =>
             minX + (i / (NUM - 1)) * (maxX - minX)
-        );
+        ).filter(x => x >= minX && x <= maxX);
 
+        // Interpolazione lineare
         const tempInterp = interpolateLinear(xs, temp, newXs);
         const densInterp = interpolateLinear(xs, dens, newXs);
         const velInterp  = interpolateLinear(xs, vel,  newXs);
@@ -407,8 +411,87 @@ if (playPauseBtn) {
     });
 }
 
+/* ============================================================
+   6) TASTIERA VERTICALE – 2 OTTAVE
+============================================================ */
+
+function drawVerticalKeyboard() {
+    const canvas = document.getElementById("keyboardCanvas");
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d");
+
+    // Resize retina
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * 2;
+    canvas.height = rect.height * 2;
+    ctx.scale(2, 2);
+
+    const w = rect.width;
+    const h = rect.height;
+
+    const octaves = 2;
+    const whitePerOctave = 7;
+    const totalWhite = octaves * whitePerOctave;
+
+    const whiteKeyHeight = 10; // verticale
+    const whiteKeyWidth = w * 0.2;
+
+    const blackKeyWidth = whiteKeyWidth * 0.6;
+    const blackKeyHeight = whiteKeyHeight * 0.6;
+
+    const blackPattern = ["A#", null, "C#", "D#", null, "F#", "G#"]; 
+    // Mappa su tasti A B C D E F G
+
+    // *** Disegna tasti bianchi ***
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 1;
+
+    let posY = 0;
+    let whiteKeyPositions = [];
+
+    for (let o = 0; o < octaves; o++) {
+        for (let i = 0; i < 7; i++) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, posY, whiteKeyWidth, whiteKeyHeight);
+            ctx.strokeRect(0, posY, whiteKeyWidth, whiteKeyHeight);
+
+            whiteKeyPositions.push({ 
+                y: posY, 
+                note: ["A","B","C","D","E","F","G"][i] + (o + 3) 
+            });
+
+            posY += whiteKeyHeight;
+        }
+    }
+
+    // *** Disegna tasti neri ***
+    ctx.fillStyle = "#000";
+
+    posY = 0;
+    for (let o = 0; o < octaves; o++) {
+        for (let i = 0; i < 7; i++) {
+            const noteSharp = blackPattern[i];
+            if (!noteSharp) {
+                posY += whiteKeyHeight;
+                continue;
+            }
+
+            const blackY = posY + whiteKeyHeight * 0.6;
+
+            ctx.fillRect(0, blackY, blackKeyWidth, blackKeyHeight);
+            posY += whiteKeyHeight;
+        }
+    }
+}
+
+// Disegno al load
+window.addEventListener("load", drawVerticalKeyboard);
+window.addEventListener("resize", drawVerticalKeyboard);
+
+
+
 // Avviare l'aggiornamento dei grafici ogni 60s (resta manuale l'evidenziazione)
 updateCharts();
 setInterval(updateCharts, 60_000);
-
-
