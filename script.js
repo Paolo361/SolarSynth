@@ -455,6 +455,7 @@ function createWhiteKey() {
 function createBlackKey() {
     const key = document.createElement('div');
     key.classList.add('key');
+    key.classList.add('black');
     key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
     }
     return key;    
@@ -466,6 +467,32 @@ function highlightKey(i) {
     keys[i].classList.toggle('selectedKey');
 }
 
+function quantizeHighlightToKey() {
+    const keyboard = document.getElementById('verticalKeyboard');
+    const keys = keyboard.children;
+    
+    // quantizzo l'indice highlightIndex alla key più vicina
+    let closestKeyIndex = 0;
+    let closestDistance = Infinity;
+    for (let i = 0; i < keys.length; i++) {
+        const keyCenter = i * 5 + 2.5; // centro della key
+        const highlightPos = (highlightIndex / (chartTemp.data.datasets[0].data.length - 1)) * (keys.length * 5);
+        const distance = Math.abs(highlightPos - keyCenter);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestKeyIndex = i;
+        }
+    }
+
+    // rimuovo la selezione da tutte le key
+    for (let i = 0; i < keys.length; i++) {
+        keys[i].classList.remove('selectedKey');
+    }
+
+    // evidenzio la key più vicina
+    keys[closestKeyIndex].classList.add('selectedKey');
+}
+
 
 // Disegno al load
 drawVerticalKeyboard();
@@ -473,5 +500,6 @@ drawVerticalKeyboard();
 // Avviare l'aggiornamento dei grafici ogni 60s (resta manuale l'evidenziazione)
 updateCharts();
 setInterval(updateCharts, 60_000);
+
 
 highlightKey(1); // evidenzia la prima nota all'inizio

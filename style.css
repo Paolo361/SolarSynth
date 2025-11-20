@@ -92,11 +92,6 @@
 
     }
 
-    #keyboardCanvas {
-        width: 20px;
-        height: 10px;
-    }
-
     .chart-label {
         text-align: center;
         font-family: "Space Mono", monospace;
@@ -105,7 +100,15 @@
         margin-top: 6px;
     }
 
-    .whiteKey {
+    .key {
+        width: 50px;
+        height: 10px;
+        border: 1px solid #000;
+        background: #334155;
+        position: relative;
+    }
+
+    .white {
         
         width: 50px;
         height: 10px;
@@ -117,7 +120,7 @@
         margin-right: -1px; /* Per evitare spazi tra i tasti */
     }
 
-    .blackKey {
+    .black {
         width: 47px;
         height: 6px;
         border: 1px solid #000;
