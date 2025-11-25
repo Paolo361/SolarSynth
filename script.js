@@ -203,6 +203,53 @@ const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
 const chartVel  = createChart("chartVel",  "green");
 
+// Preview chart (mostrato a destra della keyboard-box)
+let chartPreview = null;
+function ensurePreviewChart() {
+    if (chartPreview) return;
+    const canvas = document.getElementById('chartPreview');
+    if (!canvas) return;
+    // ensure canvas dimensions match keyboard before creating the Chart instance
+    syncPreviewHeight();
+    chartPreview = createChart('chartPreview', 'green');
+    // small initial dataset
+    chartPreview.data.datasets[0].data = [];
+    chartPreview.update('none');
+}
+
+function updatePreview(param) {
+    ensurePreviewChart();
+    if (!chartPreview) return;
+    let src = chartVel;
+    if (param === 'Temp') src = chartTemp;
+    else if (param === 'Dens') src = chartDens;
+    else if (param === 'Vel') src = chartVel;
+
+    // copy dataset (shallow copy is fine)
+    const srcDs = src.data.datasets[0];
+    chartPreview.data.datasets[0].data = srcDs.data.slice();
+    chartPreview.data.datasets[0].borderColor = srcDs.borderColor;
+    chartPreview.data.datasets[0].backgroundColor = srcDs.backgroundColor;
+    chartPreview.data.datasets[0].label = srcDs.label;
+    chartPreview.update('none');
+}
+
+// Wire select change
+document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('chartSelector');
+    if (!sel) return;
+    sel.addEventListener('change', (e) => updatePreview(e.target.value));
+    // initialize preview with current selection
+    updatePreview(sel.value);
+    // ensure preview height matches keyboard
+    syncPreviewHeight();
+});
+
+window.addEventListener('resize', () => {
+    // keep preview height synced when window size changes
+    syncPreviewHeight();
+});
+
 
 chartTemp.data.datasets[0].label = "Temperatura";
 chartDens.data.datasets[0].label = "Densità";
@@ -417,8 +464,8 @@ if (playPauseBtn) {
 
 function drawVerticalKeyboard() {
     const keyboard = document.createElement('div');
-    const box = document.querySelector('.keyboard-box');
-    box.appendChild(keyboard);
+    const container = document.getElementById('keyboardContainer') || document.querySelector('.keyboard-box');
+    container.appendChild(keyboard);
     keyboard.classList.add('verticalKeyboardContainer');
     keyboard.id = 'verticalKeyboard';
     
@@ -440,6 +487,41 @@ function drawVerticalKeyboard() {
         keyboard.appendChild(createWhiteKey());
         keyboard.appendChild(createBlackKey());
         keyboard.appendChild(createWhiteKey());
+    }
+    // after building keyboard, sync preview height
+    syncPreviewHeight();
+}
+
+function syncPreviewHeight() {
+    // Force a fixed preview size (do not follow window/keyboard resizing)
+    const FIXED_W_CSS = 300; // CSS pixels for canvas width
+    const FIXED_H_CSS = 320; // CSS pixels for canvas height
+    const PREVIEW_BOX_W = 320; // container width
+    const PREVIEW_BOX_H = 360; // container height (including margins)
+
+    const canvas = document.getElementById('chartPreview');
+    if (!canvas) return;
+    const devicePR = window.devicePixelRatio || 1;
+
+    // set the parent keyboard container height to match the preview so they align
+    try {
+        const kbCont = document.getElementById('keyboardContainer');
+        if (kbCont) {
+            kbCont.style.height = PREVIEW_BOX_H + 'px';
+            kbCont.style.overflowY = 'auto';
+        }
+    } catch (e) { /* noop */ }
+
+    // Backing store size (physical pixels) to avoid blurriness on HiDPI
+    try {
+        canvas.width = Math.round(FIXED_W_CSS * devicePR);
+        canvas.height = Math.round(FIXED_H_CSS * devicePR);
+        canvas.style.width = FIXED_W_CSS + 'px';
+        canvas.style.height = FIXED_H_CSS + 'px';
+    } catch (e) { /* ignore DOM write errors */ }
+
+    if (chartPreview) {
+        try { chartPreview.resize(); chartPreview.update('none'); } catch (e) { /* noop */ }
     }
 }
 

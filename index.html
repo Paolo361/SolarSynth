@@ -40,7 +40,20 @@
             <div class="chart-label">VELOCITÀ</div>
         </div>
     </div>
-    <div class="keyboard-box"></div>
+    <div class="keyboard-box">
+        <div class="kb-left">
+            <label for="chartSelector" class="chart-label">Seleziona grafico:</label>
+            <select id="chartSelector">
+                <option value="Temp">Temperatura</option>
+                <option value="Dens">Densità</option>
+                <option value="Vel">Velocità</option>
+            </select>
+            <div id="keyboardContainer"><!-- la tastiera verrà inserita qui via JS --></div>
+        </div>
+        <div class="preview-box">
+            <canvas id="chartPreview"></canvas>
+        </div>
+    </div>
 
 
 </div>

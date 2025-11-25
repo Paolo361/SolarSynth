@@ -141,4 +141,67 @@
         width: 70px;
         color: #FFFCF0;
         font-family: "Space Mono", monospace;
-    }   
+    }
+
+    .chart-label {
+    font-family: "Space Mono", monospace;   /* cambia font */
+    font-size: 18px;                  /* ingrandisce */
+    font-weight: bold;               /* opzionale */
+    }
+
+/* Selettore e preview nella keyboard-box */
+.keyboard-box {
+    display: flex;
+    align-items: flex-start;
+    width: auto;
+    gap: 16px;
+}
+
+.kb-left {
+    display: flex;
+    flex-direction: column; /* selettore sopra la tastiera */
+    gap: 10px;
+    width: 240px;
+}
+
+.keyboard-box label {
+    color: #ffd166;
+    font-family: "Space Mono", monospace;
+    font-weight: 700;
+}
+
+.keyboard-box select#chartSelector {
+    font-family: "Space Mono", monospace; /* same as chart labels */
+    font-weight: 700;
+    color: #334155; /* same color as chart labels */
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.06);
+    padding: 6px 8px;
+    border-radius: 6px;
+}
+
+.preview-box {
+    display: flex;
+    align-items: flex-end;       /* allinea in basso al keyboard */
+    justify-content: center;
+    /* fixed preview size (do not respond to page resize) */
+    width: auto;
+    height: 360px;
+    padding-top: 60px;}
+
+
+.preview-box canvas {
+    position: relative;
+    border-radius: 8px;
+    background: #fff;
+    display: block;
+    /* fixed CSS pixel size to match the preview-box */
+    width: 1000px !important;
+    height: 340px !important;
+}
+
+/* force keyboard container to match preview height so both align */
+#keyboardContainer, .verticalKeyboardContainer {
+    height: 360px;
+    overflow-y: auto;
+}
