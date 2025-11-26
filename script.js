@@ -102,10 +102,106 @@ const verticalLinePlugin = {
   }
 };
 
-Chart.register(lineShadowPlugin, verticalLinePlugin);
+/* Plugin per disegnare sezioni orizzontali sincronizzate ai tasti */
+const horizontalSectionsPlugin = {
+  id: 'horizontalSections',
+  afterDraw(chart, args, options) {
+    if (!chart.isHorizontalSections) return; // solo per preview chart
+    const ctx = chart.ctx;
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return;
+    
+    const numKeys = keyboard.children.length;
+    const chartArea = chart.chartArea;
+    const sectionHeight = (chartArea.bottom - chartArea.top) / numKeys;
+    
+    ctx.save();
+    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = 'rgba(2,6,23,0.15)';
+    
+    // disegna linee orizzontali per ogni sezione
+    for (let i = 1; i < numKeys; i++) {
+      const y = chartArea.top + i * sectionHeight;
+      ctx.beginPath();
+      ctx.moveTo(chartArea.left, y);
+      ctx.lineTo(chartArea.right, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+};
 
-function createChart(canvasId, color) {
-    return new Chart(document.getElementById(canvasId), {
+/* Plugin per disegnare linee verticali ai punti originali del JSON */
+const dataPointLinesPlugin = {
+  id: 'dataPointLines',
+  afterDraw(chart, args, options) {
+        // respect per-chart enable/disable via options.plugins.dataPointLines
+        const cfg = chart && chart.options && chart.options.plugins && chart.options.plugins.dataPointLines;
+        if (!cfg) return;
+
+        const ctx = chart.ctx;
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data || meta.data.length === 0) return;
+    
+    // store original data points (xs from updateCharts)
+    if (!window.originalDataXs || window.originalDataXs.length === 0) return;
+    
+    const xs = window.originalDataXs;
+    let ys = [];
+    
+    // determina i dati Y in base al grafico
+    if (chart === chartTemp && window.originalDataTemp) ys = window.originalDataTemp;
+    else if (chart === chartDens && window.originalDataDens) ys = window.originalDataDens;
+    else if (chart === chartVel && window.originalDataVel) ys = window.originalDataVel;
+    else if (chart.canvas.id === 'chartPreview' && window.originalDataYs) ys = window.originalDataYs;
+    const chartArea = chart.chartArea;
+    const scale = chart.scales.x;
+    const yScale = chart.scales.y;
+    
+    ctx.save();
+    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = 'rgba(255,193,7,0.4)'; // giallo con trasparenza
+    
+    // disegna linee verticali per ogni punto originale
+    xs.forEach((xTime, idx) => {
+      const xPx = scale.getPixelForValue(xTime);
+      if (xPx >= chartArea.left && xPx <= chartArea.right) {
+        ctx.beginPath();
+        ctx.moveTo(xPx, chartArea.top);
+        ctx.lineTo(xPx, chartArea.bottom);
+        ctx.stroke();
+      }
+    });
+    
+    // disegna cerchietti sui punti originali
+    ctx.fillStyle = 'rgba(255,193,7,0.7)'; // giallo con trasparenza
+    ctx.strokeStyle = 'rgba(255,193,7,1)'; // giallo opaco
+    ctx.lineWidth = 1.5;
+    const radius = 3.5;
+    
+    xs.forEach((xTime, idx) => {
+      if (ys && ys[idx] !== undefined) {
+        const xPx = scale.getPixelForValue(xTime);
+        const yPx = yScale.getPixelForValue(ys[idx]);
+        
+        if (xPx >= chartArea.left && xPx <= chartArea.right &&
+            yPx >= chartArea.top && yPx <= chartArea.bottom) {
+          ctx.beginPath();
+          ctx.arc(xPx, yPx, radius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    });
+    
+    ctx.restore();
+  }
+};
+
+Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, dataPointLinesPlugin);
+
+function createChart(canvasId, color, isPreview = false) {
+    const chart = new Chart(document.getElementById(canvasId), {
         type: "line",
         data: {
             datasets: [{
@@ -185,10 +281,17 @@ function createChart(canvasId, color) {
                 },
                 // enable our custom plugins with light options
                 lineShadow: { blur: 8, offsetY: 2 },
-                verticalLine: {}
+                verticalLine: {},
+                horizontalSections: isPreview ? {} : false,
+                dataPointLines: isPreview ? {} : false
             }
         }
     });
+    
+    // mark preview chart for horizontal sections rendering
+    if (isPreview) chart.isHorizontalSections = true;
+    
+    return chart;
 }
 
 /* ============================================================
@@ -211,10 +314,12 @@ function ensurePreviewChart() {
     if (!canvas) return;
     // ensure canvas dimensions match keyboard before creating the Chart instance
     syncPreviewHeight();
-    chartPreview = createChart('chartPreview', 'green');
+    chartPreview = createChart('chartPreview', 'green', true);
     // small initial dataset
     chartPreview.data.datasets[0].data = [];
     chartPreview.update('none');
+    // wire mouse events to track which key section is hovered
+    attachPreviewMouseTracking();
 }
 
 function updatePreview(param) {
@@ -232,6 +337,70 @@ function updatePreview(param) {
     chartPreview.data.datasets[0].backgroundColor = srcDs.backgroundColor;
     chartPreview.data.datasets[0].label = srcDs.label;
     chartPreview.update('none');
+
+    // ensure plugin knows which Y-values to draw dots for the preview
+    if (param === 'Temp') window.originalDataYs = window.originalDataTemp || [];
+    else if (param === 'Dens') window.originalDataYs = window.originalDataDens || [];
+    else if (param === 'Vel')  window.originalDataYs = window.originalDataVel || [];
+}
+
+function attachPreviewMouseTracking() {
+    const canvas = document.getElementById('chartPreview');
+    if (!canvas) return;
+    
+    canvas.addEventListener('mousemove', (evt) => {
+        const rect = canvas.getBoundingClientRect();
+        const y = evt.clientY - rect.top;
+        const keyIndex = getKeyIndexFromY(y);
+        if (keyIndex !== -1) {
+            const keyboard = document.getElementById('verticalKeyboard');
+            const keys = keyboard.children;
+            // remove hover from all keys, then add hover to the hovered key
+            for (let i = 0; i < keys.length; i++) {
+                keys[i].classList.remove('hoveredKey');
+            }
+            keys[keyIndex].classList.add('hoveredKey');
+            console.log(`Hovering key ${keyIndex}`);
+        }
+    });
+    
+    canvas.addEventListener('mouseleave', () => {
+        // remove all hover classes
+        const keyboard = document.getElementById('verticalKeyboard');
+        if (keyboard) {
+            for (let i = 0; i < keyboard.children.length; i++) {
+                keyboard.children[i].classList.remove('hoveredKey');
+            }
+        }
+    });
+    
+    canvas.addEventListener('click', (evt) => {
+        const rect = canvas.getBoundingClientRect();
+        const y = evt.clientY - rect.top;
+        const keyIndex = getKeyIndexFromY(y);
+        if (keyIndex !== -1) {
+            console.log(`Clicked key ${keyIndex}`);
+            // you can emit a sound or trigger MIDI note here
+        }
+    });
+}
+
+function getKeyIndexFromY(y) {
+    // map Y position in preview canvas to a key index
+    const canvas = document.getElementById('chartPreview');
+    const rect = canvas.getBoundingClientRect();
+    const canvasHeight = rect.height;
+    
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return -1;
+    const numKeys = keyboard.children.length;
+    
+    const sectionHeight = canvasHeight / numKeys;
+    let keyIndex = Math.floor(y / sectionHeight);
+    
+    // clamp to valid range
+    keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
+    return keyIndex;
 }
 
 // Wire select change
@@ -320,6 +489,13 @@ async function updateCharts() {
         const dens = ptsUsed.map(p => p.dens);
         const vel  = ptsUsed.map(p => p.vel);
         const temp = ptsUsed.map(p => p.temp);
+        
+        // store original data points for lines and dots in all charts
+        window.originalDataXs = xs;
+        window.originalDataTemp = temp;
+        window.originalDataDens = dens;
+        window.originalDataVel = vel;
+        window.originalDataYs = temp; // default per preview
 
         // Interpolazione su 300 punti, clamp minX/maxX ai valori validi
         const NUM = 300;

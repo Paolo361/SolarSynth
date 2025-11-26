@@ -132,6 +132,10 @@
         background-color: #ff621f;
     }
 
+    .hoveredKey {
+        background-color: #fbbf24;
+    }
+
     .verticalKeyboardContainer {
         display: flex;
         flex-direction: column;
