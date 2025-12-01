@@ -26,7 +26,7 @@
         margin: 0;
         padding: 0;
         background: url('background space.jpg') no-repeat center center fixed;
-        background-size:contain;
+        background-size:cover;
         font-family: Arial;
     }
 

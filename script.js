@@ -307,6 +307,8 @@ function createChart(canvasId, color, isPreview = false) {
 let highlightIndex = -1;
 let highlightTimer = null;
 let highlightSpeed = 500; // ms di default
+let quantizeTimer = null; // timer per aggiornare evidenziazione tastiera
+let highlightIndexTime = -1; // timestamp dell'ultimo highlight
 
 const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
@@ -366,7 +368,7 @@ function attachPreviewMouseTracking() {
                 keys[i].classList.remove('hoveredKey');
             }
             keys[keyIndex].classList.add('hoveredKey');
-            console.log(`Hovering key ${keyIndex}`);
+            //console.log(`Hovering key ${keyIndex}`);
         }
     });
     
@@ -407,6 +409,21 @@ function getKeyIndexFromY(y) {
     // clamp to valid range
     keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
     return keyIndex;
+}
+
+function getKeyIndexFromValue(value, maxValue, minValue) {
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return -1;
+    const numKeys = keyboard.children.length;
+    // map value range to key index
+    const clampedValue = Math.max(minValue, Math.min(maxValue, value));
+    const ratio = (clampedValue - minValue) / (maxValue - minValue);
+    let keyIndex = Math.floor(ratio * numKeys);
+    // clamp to valid range
+    keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
+    console.log("Key index from value:", keyIndex);
+    return keyIndex;
+
 }
 
 // Wire select change
@@ -549,6 +566,9 @@ function updateHighlightRender() {
     chartTemp.update("none");
     chartDens.update("none");
     chartVel.update("none");
+    if (typeof chartPreview !== 'undefined' && chartPreview) {
+        try { chartPreview.update("none"); } catch (e) {}
+    }
 }
 
 let realHighlightIndex = -1;
@@ -563,7 +583,11 @@ function advanceHighlight() {
         if (isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
             highlightIndex = next;
             realHighlightIndex = next;
-            console.log("Temp: ", chartTemp.data.datasets[0].data[highlightIndex].y);
+            // Logga l'indice quantizzato 0..34 invece del valore reale
+            try {
+                const q = quantizeCurrentSelectedValueToRange(35);
+                if (q >= 0) console.log("Quantizzato (0..34):", q);
+            } catch (e) { /* noop */ }
             updateHighlightRender();
             return;
         }
@@ -595,11 +619,16 @@ function startHighlighting(speedMs = 500) {
 
     highlightIndex = realHighlightIndex; // iniziare prima del primo
     highlightTimer = setInterval(advanceHighlight, highlightSpeed);
+    console.log(chartTemp.data.datasets[0]);
+    quantizeTimer = setInterval(quantizeHighlightToKey, highlightSpeed*5.0677966);
     advanceHighlight(); // mostra subito il primo
 }
 
 function stopHighlighting() {
-    if (highlightTimer) { clearInterval(highlightTimer); highlightTimer = null; }
+    if (highlightTimer) { 
+        clearInterval(highlightTimer);
+        clearInterval(quantizeTimer);
+        highlightTimer = null; }
     updateHighlightRender();
 }
 
@@ -609,6 +638,67 @@ function setHighlightSpeed(ms) {
     highlightSpeed = ms;
     if (wasRunning) startHighlighting(ms);
 }
+
+// Restituisce la chart selezionata dal select vicino alla tastiera
+function getSelectedChart() {
+    const sel = document.getElementById('chartSelector');
+    const value = sel ? sel.value : 'Vel';
+    if (value === 'Temp') return { chart: chartTemp, label: 'Temperatura' };
+    if (value === 'Dens') return { chart: chartDens, label: 'Densità' };
+    return { chart: chartVel, label: 'Velocità' };
+}
+
+// Stampa in console il valore quantizzato (0..34) della chart selezionata
+    // Stampa in console l'indice quantizzato (0..34) corrente della chart selezionata
+    function logCurrentSelectedValue() {
+        const q = quantizeCurrentSelectedValueToRange(35);
+        if (q < 0) {
+            console.log('Nessun punto evidenziato o quantizzazione non disponibile');
+            return null;
+        }
+        console.log(`Quantizzato (0..34): ${q}`);
+        return q;
+}
+
+// Ritorna solo il valore (numero) corrente della chart selezionata, o null
+function getCurrentSelectedValue() {
+    const { chart } = getSelectedChart();
+    const idx = typeof highlightIndex === 'number' ? highlightIndex : -1;
+    const ds = chart && chart.data && chart.data.datasets && chart.data.datasets[0];
+    const data = ds ? ds.data : [];
+    if (idx < 0 || !data || data.length === 0 || idx >= data.length) return null;
+    const p = data[idx];
+    if (!p || !Number.isFinite(p.y)) return null;
+        const min = getSelectedChartMin();
+        const max = getSelectedChartMax();
+        return { value: p.y, min, max };
+}
+
+    // Minimo corrente (scala o dati) della chart selezionata
+    function getSelectedChartMin() {
+        const { chart } = getSelectedChart();
+        if (!chart) return null;
+        if (chart.scales && chart.scales.y && Number.isFinite(chart.scales.y.min)) return chart.scales.y.min;
+        try {
+            const ds = chart.data.datasets[0];
+            const ys = (ds.data || []).map(p => (p && Number.isFinite(p.y)) ? p.y : null).filter(v => v != null);
+            if (!ys.length) return null;
+            return Math.min(...ys);
+        } catch (e) { return null; }
+    }
+
+    // Massimo corrente (scala o dati) della chart selezionata
+    function getSelectedChartMax() {
+        const { chart } = getSelectedChart();
+        if (!chart) return null;
+        if (chart.scales && chart.scales.y && Number.isFinite(chart.scales.y.max)) return chart.scales.y.max;
+        try {
+            const ds = chart.data.datasets[0];
+            const ys = (ds.data || []).map(p => (p && Number.isFinite(p.y)) ? p.y : null).filter(v => v != null);
+            if (!ys.length) return null;
+            return Math.max(...ys);
+        } catch (e) { return null; }
+    }
 
 // Wiring dei controlli UI (slider + play/pause)
 const speedKnob = document.getElementById('speedKnob');
@@ -735,26 +825,31 @@ function quantizeHighlightToKey() {
     const keyboard = document.getElementById('verticalKeyboard');
     const keys = keyboard.children;
     
-    // quantizzo l'indice highlightIndex alla key più vicina
-    let closestKeyIndex = 0;
-    let closestDistance = Infinity;
-    for (let i = 0; i < keys.length; i++) {
-        const keyCenter = i * 5 + 2.5; // centro della key
-        const highlightPos = (highlightIndex / (chartTemp.data.datasets[0].data.length - 1)) * (keys.length * 5);
-        const distance = Math.abs(highlightPos - keyCenter);
-        if (distance < closestDistance) {
-            closestDistance = distance;
-            closestKeyIndex = i;
-        }
+    const numKeys = keys.length;
+    if (numKeys === 0) return;
+
+    const { chart } = getSelectedChart();
+    const dataLen = chart.data.datasets[0].data.length;
+    if (dataLen === 0) return;
+
+    // Ottengo il valore Y corrente evidenziato
+    maxValue = getSelectedChartMax();
+    minValue = getSelectedChartMin();
+    if (maxValue === null || minValue === null) return;
+    const key = getKeyIndexFromValue(chart.data.datasets[0].data[highlightIndex] ? chart.data.datasets[0].data[highlightIndex].y : 0, maxValue, minValue);
+    console.log("Key index from Y:", key);
+
+    // Rimuovi selezione da tutte le chiavi
+    for (let k = 0; k < keys.length; k++) {
+        keys[k].classList.remove('selectedKey');
     }
 
-    // rimuovo la selezione da tutte le key
-    for (let i = 0; i < keys.length; i++) {
-        keys[i].classList.remove('selectedKey');
-    }
+    // Aggiungi selezione alla chiave calcolata
+    if (key >= 0 && key < numKeys) {
+        keys[numKeys-key].classList.add('selectedKey');
+    }   
 
-    // evidenzio la key più vicina
-    keys[closestKeyIndex].classList.add('selectedKey');
+
 }
 
 
