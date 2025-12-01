@@ -25,7 +25,8 @@
     body {
         margin: 0;
         padding: 0;
-        background: #FDFFFC;
+        background: url('background space.jpg') no-repeat center center fixed;
+        background-size:contain;
         font-family: Arial;
     }
 
@@ -80,15 +81,18 @@
     .controls input[type="range"] { width: 220px; }
 
     .keyboard-box {
-        width: 33%;
-        margin-top: 40px;
+        width: auto;
         background: #0f172a;
         border-radius: 16px;
-        padding: 20px;
+        margin-top: 20px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         position: relative;
         overflow-y: auto;        /* ← aggiungi questo */
         overflow-x: hidden;
+        display: flex;
+        align-items: flex-start;
+        width: auto;
+        gap: 16px;
 
     }
 
@@ -153,19 +157,15 @@
     font-weight: bold;               /* opzionale */
     }
 
-/* Selettore e preview nella keyboard-box */
-.keyboard-box {
-    display: flex;
-    align-items: flex-start;
-    width: auto;
-    gap: 16px;
-}
+
 
 .kb-left {
+    margin-left: 5px;
     display: flex;
     flex-direction: column; /* selettore sopra la tastiera */
     gap: 10px;
-    width: 240px;
+    width: auto;
+    align-items: center;
 }
 
 .keyboard-box label {
@@ -177,6 +177,7 @@
 .keyboard-box select#chartSelector {
     font-family: "Space Mono", monospace; /* same as chart labels */
     font-weight: 700;
+    width: 200px;
     color: #334155; /* same color as chart labels */
     background: transparent;
     border: 1px solid rgba(255,255,255,0.06);
@@ -186,12 +187,12 @@
 
 .preview-box {
     display: flex;
-    align-items: flex-end;       /* allinea in basso al keyboard */
+    align-items: flex-start;       /* allinea in alto */
     justify-content: center;
     /* fixed preview size (do not respond to page resize) */
     width: auto;
-    height: 360px;
-    padding-top: 60px;}
+    height: 340px;
+}
 
 
 .preview-box canvas {
@@ -201,11 +202,18 @@
     display: block;
     /* fixed CSS pixel size to match the preview-box */
     width: 1000px !important;
-    height: 340px !important;
+    height: 350px !important;
+}
+
+.container{
+    display: flex;
 }
 
 /* force keyboard container to match preview height so both align */
 #keyboardContainer, .verticalKeyboardContainer {
     height: 360px;
+    width: 50px;
+    padding-top: 5px;
+    padding-right: 5px;
     overflow-y: auto;
 }

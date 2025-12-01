@@ -117,15 +117,21 @@ const horizontalSectionsPlugin = {
     
     ctx.save();
     ctx.lineWidth = 0.5;
-    ctx.strokeStyle = 'rgba(2,6,23,0.15)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    // ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    // ctx.font = '10px Space Mono, monospace';
+    // ctx.textAlign = 'right';
+    // ctx.textBaseline = 'middle';
     
     // disegna linee orizzontali per ogni sezione
-    for (let i = 1; i < numKeys; i++) {
+    for (let i = 0; i <= numKeys; i++) {
       const y = chartArea.top + i * sectionHeight;
       ctx.beginPath();
       ctx.moveTo(chartArea.left, y);
       ctx.lineTo(chartArea.right, y);
       ctx.stroke();
+      
+      // disegna indice a sinistra della linea
     }
     ctx.restore();
   }
