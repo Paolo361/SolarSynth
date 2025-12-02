@@ -544,6 +544,10 @@ async function updateCharts() {
         chartDens.update("none");
         chartVel.update("none");
 
+        // Aggiorna anche la preview chart se presente, per mantenerla sincronizzata con i nuovi dati
+        const sel = document.getElementById('chartSelector');
+        if (sel) updatePreview(sel.value);
+
     } catch (e) {
         console.error("Errore fetching NOAA:", e);
     }
@@ -583,15 +587,17 @@ function advanceHighlight() {
         if (isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
             highlightIndex = next;
             realHighlightIndex = next;
-            // Logga l'indice quantizzato 0..34 invece del valore reale
-            try {
-                const q = quantizeCurrentSelectedValueToRange(35);
-                if (q >= 0) console.log("Quantizzato (0..34):", q);
-            } catch (e) { /* noop */ }
+            currIdxTime = indexToTime(chartTemp, highlightIndex);
+            console.log("highlightIndexTime:", currIdxTime, "vs", highlightIndexTime);
+            if(currIdxTime !== highlightIndexTime) {
+                highlightIndexTime = currIdxTime;
+                quantizeHighlightToKey();
+            }
             updateHighlightRender();
             return;
         }
     }
+
 
     // nessun punto valido trovato
     highlightIndex = -1;
@@ -620,7 +626,6 @@ function startHighlighting(speedMs = 500) {
     highlightIndex = realHighlightIndex; // iniziare prima del primo
     highlightTimer = setInterval(advanceHighlight, highlightSpeed);
     console.log(chartTemp.data.datasets[0]);
-    quantizeTimer = setInterval(quantizeHighlightToKey, highlightSpeed*5.0677966);
     advanceHighlight(); // mostra subito il primo
 }
 
@@ -628,7 +633,8 @@ function stopHighlighting() {
     if (highlightTimer) { 
         clearInterval(highlightTimer);
         clearInterval(quantizeTimer);
-        highlightTimer = null; }
+        highlightTimer = null;
+        quantizeTimer = null;}
     updateHighlightRender();
 }
 
@@ -849,6 +855,20 @@ function quantizeHighlightToKey() {
         keys[numKeys-key].classList.add('selectedKey');
     }   
 
+
+}
+
+function indexToTime(chart, idx) {
+    const point = chart.data.datasets[0].data[idx];
+
+    // --- ACCESSO AL TEMPO (X) ---
+    if (point) {
+        const date = new Date(point.x);
+        // Formatta in HH:mm
+        const timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        console.log("Orario corrente:", timeStr);
+        return timeStr;
+    }
 
 }
 
