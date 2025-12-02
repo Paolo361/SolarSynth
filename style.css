@@ -210,10 +210,17 @@
 }
 
 /* force keyboard container to match preview height so both align */
-#keyboardContainer, .verticalKeyboardContainer {
+#keyboardContainer {
     height: 360px;
     width: 50px;
     padding-top: 5px;
     padding-right: 5px;
-    overflow-y: auto;
+    overflow-y: hidden; /* Nasconde la scrollbar se il contenuto rientra */
+}
+
+.verticalKeyboardContainer {
+    padding-top: 5px;
+    width: 50px;
+    display: flex;
+    flex-direction: column;
 }
