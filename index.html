@@ -17,9 +17,11 @@
 <div class="main-box">
 
     <div class="controls">
-        <label for="speedKnob">Velocità highlight:</label>
-        <input id="speedKnob" type="range" min="5" max="200" step="1" value="50">
-        <span id="speedValue"></span>
+        <div class="knob-wrapper">
+            <div id="speedValue" class="speed-tooltip">200 ms</div>
+            <div id="speedKnobControl" class="knob"></div>
+            <div class="knob-label">SPEED</div>
+        </div>
         <button id="playPauseBtn">Play</button>
     </div>
 
@@ -42,16 +44,25 @@
     </div>
     <div class="keyboard-box">
         <div class="kb-left">
-            <label for="chartSelector" class="chart-label">Seleziona grafico:</label>
-            <select id="chartSelector">
-                <option value="Temp">Temperatura</option>
-                <option value="Dens">Densità</option>
-                <option value="Vel">Velocità</option>
-            </select>
             <div class="container">
                 <div id="keyboardContainer"><!-- la tastiera verrà inserita qui via JS --></div>
                 <div class="preview-box">
                     <canvas id="chartPreview"></canvas>
+                </div>
+            </div>
+            
+            <div class="chart-switch-container">
+                <div class="chart-switch">
+                    <input type="radio" name="chartSource" id="sourceTemp" value="Temp" checked>
+                    <label for="sourceTemp" title="Temperatura">K</label>
+                    
+                    <input type="radio" name="chartSource" id="sourceDens" value="Dens">
+                    <label for="sourceDens" title="Densità">D</label>
+                    
+                    <input type="radio" name="chartSource" id="sourceVel" value="Vel">
+                    <label for="sourceVel" title="Velocità">V</label>
+                    
+                    <div class="switch-slider"></div>
                 </div>
             </div>
         </div>

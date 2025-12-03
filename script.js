@@ -117,7 +117,7 @@ const horizontalSectionsPlugin = {
     
     ctx.save();
     ctx.lineWidth = 0.5;
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
     // ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     // ctx.font = '10px Space Mono, monospace';
     // ctx.textAlign = 'right';
@@ -166,7 +166,7 @@ const dataPointLinesPlugin = {
     
     ctx.save();
     ctx.lineWidth = 0.8;
-    ctx.strokeStyle = 'rgba(255,193,7,0.4)'; // giallo con trasparenza
+    ctx.strokeStyle = 'rgba(255,193,7,0.05)'; // giallo più opaco
     
     // disegna linee verticali per ogni punto originale
     xs.forEach((xTime, idx) => {
@@ -428,11 +428,15 @@ function getKeyIndexFromValue(value, maxValue, minValue) {
 
 // Wire select change
 document.addEventListener('DOMContentLoaded', () => {
-    const sel = document.getElementById('chartSelector');
-    if (!sel) return;
-    sel.addEventListener('change', (e) => updatePreview(e.target.value));
-    // initialize preview with current selection
-    updatePreview(sel.value);
+    const radios = document.querySelectorAll('input[name="chartSource"]');
+    radios.forEach(r => {
+        r.addEventListener('change', (e) => updatePreview(e.target.value));
+    });
+    
+    // initialize preview with current selection (default Temp)
+    const current = document.querySelector('input[name="chartSource"]:checked');
+    if (current) updatePreview(current.value);
+    
     // ensure preview height matches keyboard
     syncPreviewHeight();
 });
@@ -545,8 +549,8 @@ async function updateCharts() {
         chartVel.update("none");
 
         // Aggiorna anche la preview chart se presente, per mantenerla sincronizzata con i nuovi dati
-        const sel = document.getElementById('chartSelector');
-        if (sel) updatePreview(sel.value);
+        const radio = document.querySelector('input[name="chartSource"]:checked');
+        if (radio) updatePreview(radio.value);
 
     } catch (e) {
         console.error("Errore fetching NOAA:", e);
@@ -606,7 +610,7 @@ function advanceHighlight() {
 }
 
  
-function startHighlighting(speedMs = 500) {
+function startHighlighting(speedMs = 200) {
     highlightSpeed = speedMs;
     if (highlightTimer !== null) clearInterval(highlightTimer);
 
@@ -647,8 +651,8 @@ function setHighlightSpeed(ms) {
 
 // Restituisce la chart selezionata dal select vicino alla tastiera
 function getSelectedChart() {
-    const sel = document.getElementById('chartSelector');
-    const value = sel ? sel.value : 'Vel';
+    const radio = document.querySelector('input[name="chartSource"]:checked');
+    const value = radio ? radio.value : 'Temp';
     if (value === 'Temp') return { chart: chartTemp, label: 'Temperatura' };
     if (value === 'Dens') return { chart: chartDens, label: 'Densità' };
     return { chart: chartVel, label: 'Velocità' };
@@ -706,26 +710,84 @@ function getCurrentSelectedValue() {
         } catch (e) { return null; }
     }
 
-// Wiring dei controlli UI (slider + play/pause)
-const speedKnob = document.getElementById('speedKnob');
+// Wiring dei controlli UI (knob + play/pause)
+const speedKnobControl = document.getElementById('speedKnobControl');
 const speedValue = document.getElementById('speedValue');
 const playPauseBtn = document.getElementById('playPauseBtn');
 let isPlaying = false;
 
-if (speedKnob) {
-    speedKnob.value = String(highlightSpeed);
-    speedValue.textContent = `${highlightSpeed} ms`;
-    speedKnob.addEventListener('input', (e) => {
-        const v = Number(e.target.value);
-        speedValue.textContent = `${v} ms`;
-        setHighlightSpeed(v);
+// Knob logic
+if (speedKnobControl) {
+    let isDragging = false;
+    let startY = 0;
+    let startSpeed = highlightSpeed;
+    // Min and max speed values (ms) - inverted logic: lower ms = faster
+    const minSpeed = 20;
+    const maxSpeed = 200;
+    
+    // Initial rotation based on current speed
+    // Map speed (maxSpeed -> minSpeed) to rotation (-135 -> 135 degrees)
+    // 200ms (slow) -> -135deg
+    // 20ms (fast) -> 135deg
+    const updateKnobRotation = (speed) => {
+        // Normalize speed to 0-1 range (inverted because lower is faster)
+        // 200 -> 0, 20 -> 1
+        const t = 1 - (speed - minSpeed) / (maxSpeed - minSpeed);
+        const angle = -135 + t * 270;
+        speedKnobControl.style.transform = `rotate(${angle}deg)`;
+    };
+
+    updateKnobRotation(highlightSpeed);
+    if (speedValue) speedValue.textContent = `${highlightSpeed} ms`;
+
+    speedKnobControl.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        startSpeed = highlightSpeed;
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault(); // Prevent text selection
+        
+        // Show tooltip
+        if (speedValue) speedValue.classList.add('visible');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaY = startY - e.clientY; // Up is positive
+        const sensitivity = 2; // Pixels per ms change
+        
+        // Calculate new speed
+        // Dragging up (positive delta) should decrease ms (faster)
+        // Dragging down (negative delta) should increase ms (slower)
+        let newSpeed = startSpeed - (deltaY * sensitivity);
+        
+        // Clamp values
+        newSpeed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
+        newSpeed = Math.round(newSpeed);
+        
+        if (newSpeed !== highlightSpeed) {
+            setHighlightSpeed(newSpeed);
+            updateKnobRotation(newSpeed);
+            if (speedValue) speedValue.textContent = `${newSpeed} ms`;
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = 'default';
+            
+            // Hide tooltip
+            if (speedValue) speedValue.classList.remove('visible');
+        }
     });
 }
 
 if (playPauseBtn) {
     playPauseBtn.addEventListener('click', () => {
         if (!isPlaying) {
-            startHighlighting(Number(speedKnob.value || highlightSpeed));
+            startHighlighting(highlightSpeed);
             playPauseBtn.textContent = 'Pause';
             isPlaying = true;
         } else {
