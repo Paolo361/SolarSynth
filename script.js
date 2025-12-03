@@ -306,7 +306,7 @@ function createChart(canvasId, color, isPreview = false) {
 // Stato globale per l'evidenziazione: dichiarato prima della creazione dei grafici
 let highlightIndex = -1;
 let highlightTimer = null;
-let highlightSpeed = 500; // ms di default
+let highlightSpeed = 200; // ms di default
 let quantizeTimer = null; // timer per aggiornare evidenziazione tastiera
 let highlightIndexTime = -1; // timestamp dell'ultimo highlight
 
