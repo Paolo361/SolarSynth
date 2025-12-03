@@ -141,6 +141,18 @@
         background-color: #fbbf24;
     }
 
+    .quantizedKey {
+        box-shadow: 0 0 8px rgba(251,191,36,0.85);
+        outline: 1px solid rgba(251,191,36,0.9);
+    }
+
+    /* Highlight used while a note is being played (overrides selected red) */
+    .playingKey {
+        background-color: #FFD54A !important; /* vivid warm yellow */
+        box-shadow: 0 0 12px rgba(255,213,74,0.95);
+        outline: 2px solid rgba(255,193,7,1);
+    }
+
     .verticalKeyboardContainer {
         display: flex;
         flex-direction: column;

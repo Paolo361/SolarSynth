@@ -206,6 +206,238 @@ const dataPointLinesPlugin = {
 
 Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, dataPointLinesPlugin);
 
+// --- Tone.js synth setup ---
+let toneSynth = null;
+let toneStarted = false;
+let lastPlayedMidi = null;
+let lastPlayTime = 0;
+const playCooldown = 150; // ms between retriggers of same note
+// Optional sample player for oneshot sample mapping
+let samplePlayer = null;
+let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
+let sampleLoadedName = null;
+
+function ensureToneStarted() {
+    try {
+        if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).toDestination();
+        if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
+            // Tone.start() must be called in a user gesture; try to start silently if possible
+            Tone.start();
+            toneStarted = true;
+        }
+    } catch (e) {
+        console.warn('Tone.js not available or failed to start', e);
+    }
+}
+
+// Load a sample from a remote URL and set its root MIDI (e.g., 60 for C4)
+async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
+    try {
+        if (typeof Tone === 'undefined') throw new Error('Tone.js required');
+        // Ensure Tone audio context is started (requires user gesture on some browsers)
+        ensureToneStarted();
+        
+        // Dispose old sample player if it exists (allow replacing sample)
+        if (samplePlayer) {
+            try {
+                samplePlayer.dispose();
+                console.log('Old sample disposed');
+            } catch (e) { /* ignore disposal errors */ }
+        }
+        
+        // Fetch the audio file as an ArrayBuffer
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        
+        // Decode using Web Audio API directly
+        const audioContext = Tone.getContext().rawContext;
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        
+        // Create a Tone.Player from the decoded buffer
+        samplePlayer = new Tone.Player({ onload: () => {
+            console.log('Player ready');
+        } });
+        // Manually set the buffer
+        samplePlayer.buffer.set(audioBuffer);
+        
+        sampleRootMidi = Number(rootMidi) || 60;
+        sampleLoadedName = name || url;
+        console.log('Sample loaded successfully. Name:', name, 'Root MIDI:', sampleRootMidi, 'Buffer channels:', audioBuffer.numberOfChannels, 'Duration:', audioBuffer.duration);
+        return true;
+    } catch (e) {
+        console.warn('Failed to load sample', e);
+        samplePlayer = null;
+        sampleLoadedName = null;
+        return false;
+    }
+}
+
+// Prompt the user to pick a local audio file and load it as the sample.
+function pickSampleFile(rootMidi = 60, fileInputEl = null) {
+    // If a file input element is provided, use it (our UI adds one). Otherwise create temporary.
+    const handleFile = async (f) => {
+        if (!f) return;
+        const url = URL.createObjectURL(f);
+        const ok = await loadSampleFromUrl(url, rootMidi, f.name);
+        if (ok) {
+            const status = document.getElementById('sampleStatus');
+            if (status) status.textContent = `Caricato: ${f.name} (root ${sampleRootMidi})`;
+        }
+    };
+
+    if (fileInputEl) {
+        // Reset the input value to allow selecting the same file again (or a new one)
+        fileInputEl.value = '';
+        
+        const file = fileInputEl.files && fileInputEl.files[0];
+        if (file) return handleFile(file);
+
+        // attach change listener
+        fileInputEl.onchange = (ev) => {
+            const f = ev.target.files && ev.target.files[0];
+            handleFile(f);
+        };
+        fileInputEl.click();
+        return;
+    }
+
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'audio/*';
+    inp.onchange = async (ev) => {
+        const f = ev.target.files && ev.target.files[0];
+        await handleFile(f);
+    };
+    inp.click();
+}
+
+// Play loaded sample transposed to the requested MIDI note (oneshot) using playbackRate
+function playSampleAtMidi(midi) {
+    try {
+        if (!samplePlayer || !samplePlayer.buffer) {
+            console.warn('No sample loaded or buffer missing');
+            return false;
+        }
+        const root = Number(sampleRootMidi) || 60;
+        const semitoneShift = midi - root;
+
+        console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
+
+        // Ensure audio context is started
+        ensureToneStarted();
+
+        // Clone player from buffer to allow overlapping oneshots
+        const temp = new Tone.Player(samplePlayer.buffer).toDestination();
+        
+        // Calculate playback rate for pitch shifting (2^(semitones/12))
+        const playbackRate = Math.pow(2, semitoneShift / 12);
+        temp.playbackRate = playbackRate;
+        
+        temp.start();
+
+        // dispose after a short timeout (safe margin based on original duration)
+        setTimeout(() => {
+            try { temp.stop(); temp.dispose(); } catch (e) {}
+        }, (samplePlayer.buffer.duration / playbackRate + 0.5) * 1000);
+
+        return true;
+    } catch (e) {
+        console.warn('Sample play failed', e);
+        return false;
+    }
+}
+
+function playMidiIfSelected(midi) {
+    if (!midi || typeof midi !== 'number') return;
+    const now = Date.now();
+    if (midi === lastPlayedMidi && (now - lastPlayTime) < playCooldown) return; // throttle
+
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return;
+    const numKeys = keyboard.children.length;
+    if (numKeys <= 0) return;
+    // Find the DOM key element that has this midi assigned (data-midi)
+    let keyEl = null;
+    for (let i = 0; i < keyboard.children.length; i++) {
+        const k = keyboard.children[i];
+        if (k && k.dataset && Number(k.dataset.midi) === midi) { keyEl = k; break; }
+    }
+    if (!keyEl) return;
+
+    // play only if key was previously toggled selected by user
+    if (!keyEl.classList.contains('selectedKey')) return;
+
+    // Only play if a one-shot sample is loaded (no synth fallback)
+    if (!samplePlayer || !samplePlayer.buffer) return;
+
+    try {
+        playSampleAtMidi(midi);
+        lastPlayedMidi = midi;
+        lastPlayTime = now;
+        // add transient playing highlight to the DOM key
+        try {
+            if (keyEl) {
+                keyEl.classList.add('playingKey');
+                setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220);
+            }
+        } catch (e) { /* ignore UI errors */ }
+    } catch (e) {
+        console.warn('Error playing note', e);
+    }
+}
+
+// Try to play the requested midi. If that key is not user-selected, find the
+// nearest user-selected key (by midi distance) and play/highlight that instead.
+function triggerPlayWithFallback(requestedMidi) {
+    if (!requestedMidi || typeof requestedMidi !== 'number') return;
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return;
+
+    // find the direct key element
+    let directEl = null;
+    for (let i = 0; i < keyboard.children.length; i++) {
+        const k = keyboard.children[i];
+        if (k && k.dataset && Number(k.dataset.midi) === requestedMidi) { directEl = k; break; }
+    }
+
+    // if direct exists and is selected, play it
+    if (directEl && directEl.classList.contains('selectedKey')) {
+        playMidiIfSelected(requestedMidi);
+        return;
+    }
+
+    // otherwise find nearest selected key by midi distance
+    let nearest = null;
+    let nearestDiff = Infinity;
+    for (let i = 0; i < keyboard.children.length; i++) {
+        const k = keyboard.children[i];
+        if (!k || !k.dataset) continue;
+        if (!k.classList.contains('selectedKey')) continue; // must be user-selected
+        const m = Number(k.dataset.midi);
+        if (!Number.isFinite(m)) continue;
+        const diff = Math.abs(m - requestedMidi);
+        if (diff < nearestDiff) { nearestDiff = diff; nearest = k; }
+    }
+
+    if (nearest) {
+        // play nearest selected
+        try {
+            const midi = Number(nearest.dataset.midi);
+            // Only play if a one-shot sample is loaded (no synth fallback)
+            if (!samplePlayer || !samplePlayer.buffer) return;
+            playSampleAtMidi(midi);
+            // transient highlight
+            nearest.classList.add('playingKey');
+            setTimeout(() => { try { nearest.classList.remove('playingKey'); } catch(e){} }, 220);
+            lastPlayedMidi = midi;
+            lastPlayTime = Date.now();
+        } catch (e) { /* ignore */ }
+    } else {
+        // no selected key found — do nothing
+    }
+}
+
 function createChart(canvasId, color, isPreview = false) {
     const chart = new Chart(document.getElementById(canvasId), {
         type: "line",
@@ -326,7 +558,7 @@ function ensurePreviewChart() {
     // small initial dataset
     chartPreview.data.datasets[0].data = [];
     chartPreview.update('none');
-    // wire mouse events to track which key section is hovered
+    // wire mouse events (minimal) for preview canvas
     attachPreviewMouseTracking();
 }
 
@@ -355,23 +587,8 @@ function updatePreview(param) {
 function attachPreviewMouseTracking() {
     const canvas = document.getElementById('chartPreview');
     if (!canvas) return;
-    
-    canvas.addEventListener('mousemove', (evt) => {
-        const rect = canvas.getBoundingClientRect();
-        const y = evt.clientY - rect.top;
-        const keyIndex = getKeyIndexFromY(y);
-        if (keyIndex !== -1) {
-            const keyboard = document.getElementById('verticalKeyboard');
-            const keys = keyboard.children;
-            // remove hover from all keys, then add hover to the hovered key
-            for (let i = 0; i < keys.length; i++) {
-                keys[i].classList.remove('hoveredKey');
-            }
-            keys[keyIndex].classList.add('hoveredKey');
-            //console.log(`Hovering key ${keyIndex}`);
-        }
-    });
-    
+    // We intentionally do NOT track mouse movement for playback.
+    // Mouse-based highlighting and sound have been removed per user request.
     canvas.addEventListener('mouseleave', () => {
         // remove all hover classes
         const keyboard = document.getElementById('verticalKeyboard');
@@ -381,16 +598,93 @@ function attachPreviewMouseTracking() {
             }
         }
     });
-    
-    canvas.addEventListener('click', (evt) => {
-        const rect = canvas.getBoundingClientRect();
-        const y = evt.clientY - rect.top;
-        const keyIndex = getKeyIndexFromY(y);
-        if (keyIndex !== -1) {
-            console.log(`Clicked key ${keyIndex}`);
-            // you can emit a sound or trigger MIDI note here
+    // retain click for potential future interactions (no-op for now)
+    canvas.addEventListener('click', (evt) => {});
+}
+
+// When the moving marker (highlightIndex) advances, detect original data points
+// whose X is close to the marker and highlight/play them accordingly.
+function processMovingDotForIndex(idx) {
+    try {
+        if (!window.originalDataXs || !window.originalDataXs.length) {
+            // clear quantized classes
+            const keyboard = document.getElementById('verticalKeyboard');
+            if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
+            return;
         }
-    });
+
+        const interp = chartTemp.data.datasets[0].data || [];
+        if (!interp.length || idx < 0 || idx >= interp.length) return;
+
+        const movingX = interp[idx].x;
+
+        // estimate spacing between interpolated points (fallback to reasonable ms value)
+        let spacing = null;
+        if (interp.length > 1) spacing = Math.abs(interp[1].x - interp[0].x);
+        else if (window.originalDataXs.length > 1) spacing = Math.abs(window.originalDataXs[1] - window.originalDataXs[0]) / 2;
+        if (!spacing || !isFinite(spacing)) spacing = 1000; // 1s fallback
+
+        const xs = window.originalDataXs;
+        const ys = window.originalDataYs || window.originalDataTemp || window.originalDataDens || window.originalDataVel || [];
+
+        // clear previous auto-quantized highlights
+        const keyboard = document.getElementById('verticalKeyboard');
+        if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
+
+        // compute min/max for mapping Y->MIDI
+        const numericYs = ys.filter(v => Number.isFinite(v));
+        const hasNumeric = numericYs.length > 0;
+        const minY = hasNumeric ? Math.min(...numericYs) : 0;
+        const maxY = hasNumeric ? Math.max(...numericYs) : minY + 1;
+
+        // compute average original spacing to set a robust threshold
+        let avgOrigSpacing = null;
+        if (xs.length > 1) {
+            let sum = 0;
+            for (let i = 1; i < xs.length; i++) sum += Math.abs(xs[i] - xs[i-1]);
+            avgOrigSpacing = sum / (xs.length - 1);
+        }
+        if (!avgOrigSpacing || !isFinite(avgOrigSpacing)) avgOrigSpacing = spacing;
+
+        // choose threshold as the larger of (1.5 * interpolated spacing) and (0.6 * average original spacing)
+        const threshold = Math.max(spacing * 1.5, avgOrigSpacing * 0.6);
+
+        // find single nearest original point to the moving marker
+        let nearestIdx = -1;
+        let minDx = Infinity;
+        for (let i = 0; i < xs.length; i++) {
+            const dx = Math.abs(xs[i] - movingX);
+            if (dx < minDx) { minDx = dx; nearestIdx = i; }
+        }
+
+        if (nearestIdx >= 0 && minDx <= threshold) {
+            const yVal = ys[nearestIdx];
+            if (Number.isFinite(yVal)) {
+                // compute midi
+                let midi = 48;
+                if (maxY !== minY) {
+                    const ratio = (yVal - minY) / (maxY - minY);
+                    midi = Math.round(48 + ratio * (83 - 48));
+                    midi = Math.max(48, Math.min(83, midi));
+                }
+
+                // highlight corresponding key (visual) regardless of selection
+                if (keyboard) {
+                    for (let k = 0; k < keyboard.children.length; k++) {
+                        const el = keyboard.children[k];
+                        if (el && el.dataset && Number(el.dataset.midi) === midi) {
+                            el.classList.add('quantizedKey');
+                            // attempt to play the requested midi; if not selected, fallback to nearest selected
+                            triggerPlayWithFallback(midi);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // ignore any errors in audio/highlight processing
+    }
 }
 
 function getKeyIndexFromY(y) {
@@ -439,6 +733,40 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ensure preview height matches keyboard
     syncPreviewHeight();
+
+    // --- Sample UI wiring ---
+    try {
+        const loadBtn = document.getElementById('loadSampleBtn');
+        const fileInput = document.getElementById('sampleFileInput');
+        const rootInput = document.getElementById('sampleRoot');
+        const status = document.getElementById('sampleStatus');
+
+        if (loadBtn && fileInput) {
+            loadBtn.addEventListener('click', (e) => {
+                // use the visible root value when opening picker
+                const root = rootInput ? Number(rootInput.value) || 60 : 60;
+                pickSampleFile(root, fileInput);
+            });
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', async (ev) => {
+                const f = ev.target.files && ev.target.files[0];
+                if (f) {
+                    await loadSampleFromUrl(URL.createObjectURL(f), Number(rootInput ? rootInput.value : 60) || 60, f.name);
+                    if (status) status.textContent = `Caricato: ${f.name} (root ${sampleRootMidi})`;
+                }
+            });
+        }
+
+        if (rootInput) {
+            rootInput.addEventListener('change', (e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v)) sampleRootMidi = v;
+                if (status && sampleLoadedName) status.textContent = `Caricato: ${sampleLoadedName} (root ${sampleRootMidi})`;
+            });
+        }
+    } catch (e) { /* ignore UI wiring errors */ }
 });
 
 window.addEventListener('resize', () => {
@@ -595,7 +923,8 @@ function advanceHighlight() {
             console.log("highlightIndexTime:", currIdxTime, "vs", highlightIndexTime);
             if(currIdxTime !== highlightIndexTime) {
                 highlightIndexTime = currIdxTime;
-                quantizeHighlightToKey();
+                // process the moving marker: detect original points near it and trigger highlights/notes
+                processMovingDotForIndex(highlightIndex);
             }
             updateHighlightRender();
             return;
@@ -639,6 +968,11 @@ function stopHighlighting() {
         clearInterval(quantizeTimer);
         highlightTimer = null;
         quantizeTimer = null;}
+    // clear any auto-quantized highlights
+    try {
+        const keyboard = document.getElementById('verticalKeyboard');
+        if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
+    } catch (e) {}
     updateHighlightRender();
 }
 
@@ -830,6 +1164,17 @@ function drawVerticalKeyboard() {
     }
     // after building keyboard, sync preview height
     syncPreviewHeight();
+
+    // assign MIDI numbers to keys: bottom -> C3 (48), top -> B5 (83)
+    try {
+        const keys = keyboard.children;
+        const numKeys = keys.length;
+        for (let i = 0; i < numKeys; i++) {
+            // DOM order: 0 is top, last is bottom. We want bottom -> 48
+            const midi = 48 + (numKeys - 1 - i);
+            keys[i].dataset.midi = String(midi);
+        }
+    } catch (e) { /* noop */ }
 }
 
 function syncPreviewHeight() {
@@ -907,15 +1252,25 @@ function quantizeHighlightToKey() {
     const key = getKeyIndexFromValue(chart.data.datasets[0].data[highlightIndex] ? chart.data.datasets[0].data[highlightIndex].y : 0, maxValue, minValue);
     console.log("Key index from Y:", key);
 
-    // Rimuovi selezione da tutte le chiavi
+    // rimuovi solo la classe di quantizzazione precedente (non rimuovere le selezioni utente)
     for (let k = 0; k < keys.length; k++) {
-        keys[k].classList.remove('selectedKey');
+        keys[k].classList.remove('quantizedKey');
     }
 
-    // Aggiungi selezione alla chiave calcolata
+    // Aggiungi indicazione di quantizzazione (classe separata) alla chiave calcolata
     if (key >= 0 && key < numKeys) {
-        keys[numKeys-key].classList.add('selectedKey');
-    }   
+        const target = keys[numKeys - key];
+        if (target) {
+            target.classList.add('quantizedKey');
+            // se la key è stata selezionata dall'utente, suona la nota corrispondente
+            try {
+                if (target.classList.contains('selectedKey')) {
+                    const midi = Number(target.dataset.midi);
+                    if (Number.isFinite(midi)) playMidiIfSelected(midi);
+                }
+            } catch (e) { /* noop */ }
+        }
+    }
 
 
 }
