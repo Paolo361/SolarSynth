@@ -332,7 +332,11 @@ function playSampleAtMidi(midi) {
         
         // Calculate playback rate for pitch shifting (2^(semitones/12))
         const playbackRate = Math.pow(2, semitoneShift / 12);
-        temp.playbackRate = playbackRate;
+        if (temp.playbackRate instanceof Tone.Signal || (temp.playbackRate && typeof temp.playbackRate.value !== 'undefined')) {
+            temp.playbackRate.value = playbackRate;
+        } else {
+            temp.playbackRate = playbackRate;
+        }
         
         temp.start();
 
@@ -1254,21 +1258,22 @@ function quantizeHighlightToKey() {
 
     // rimuovi solo la classe di quantizzazione precedente (non rimuovere le selezioni utente)
     for (let k = 0; k < keys.length; k++) {
-        keys[k].classList.remove('quantizedKey');
+        keys[k].classList.remove('selectedKey');
     }
 
     // Aggiungi indicazione di quantizzazione (classe separata) alla chiave calcolata
     if (key >= 0 && key < numKeys) {
         const target = keys[numKeys - key];
         if (target) {
-            target.classList.add('quantizedKey');
+            target.classList.add('selectedKey');
             // se la key è stata selezionata dall'utente, suona la nota corrispondente
             try {
                 if (target.classList.contains('selectedKey')) {
                     const midi = Number(target.dataset.midi);
+                    console.log("Triggering quantized play for midi:", midi);
                     if (Number.isFinite(midi)) playMidiIfSelected(midi);
                 }
-            } catch (e) { /* noop */ }
+            } catch (e) { console.log("Error triggering quantized play:", e);}
         }
     }
 
@@ -1298,4 +1303,6 @@ updateCharts();
 setInterval(updateCharts, 60_000);
 
 
-highlightKey(1); // evidenzia la prima nota all'inizio
+
+// Carica il sample di default
+loadSampleFromUrl('prova.wav', 60, 'prova.wav');

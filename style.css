@@ -25,9 +25,18 @@
     body {
         margin: 0;
         padding: 0;
-        background: url('background space.jpg') no-repeat center center fixed;
-        background-size:cover;
         font-family: Arial;
+        overflow-x: hidden; /* Prevent horizontal scroll */
+    }
+
+    #bgVideo {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: -1;
     }
 
     .main-box {
@@ -218,14 +227,13 @@
 
 .container{
     display: flex;
+    gap: 20px;
 }
 
 /* force keyboard container to match preview height so both align */
 #keyboardContainer {
     height: 360px;
     width: 50px;
-    padding-top: 5px;
-    padding-right: 5px;
     overflow-y: hidden; /* Nasconde la scrollbar se il contenuto rientra */
 }
 
