@@ -208,6 +208,8 @@ Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, d
 
 // --- Tone.js synth setup ---
 let toneSynth = null;
+let mainLimiter = null;
+let mainCompressor = null;
 let toneStarted = false;
 let lastPlayedMidi = null;
 let lastPlayTime = 0;
@@ -219,7 +221,17 @@ let sampleLoadedName = null;
 
 function ensureToneStarted() {
     try {
-        if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).toDestination();
+        if (!mainLimiter) {
+            // Chain: Compressor -> Limiter -> Destination
+            mainLimiter = new Tone.Limiter(-2).toDestination();
+            mainCompressor = new Tone.Compressor({
+                threshold: -20,
+                ratio: 4,
+                attack: 0.01,
+                release: 0.1
+            }).connect(mainLimiter);
+        }
+        if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(mainCompressor);
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             // Tone.start() must be called in a user gesture; try to start silently if possible
             Tone.start();
@@ -328,7 +340,8 @@ function playSampleAtMidi(midi) {
         ensureToneStarted();
 
         // Clone player from buffer to allow overlapping oneshots
-        const temp = new Tone.Player(samplePlayer.buffer).toDestination();
+        const temp = new Tone.Player(samplePlayer.buffer).connect(mainCompressor);
+        temp.volume.value = -4; // Reduce individual sample volume to prevent summing overload
         
         // Calculate playback rate for pitch shifting (2^(semitones/12))
         const playbackRate = Math.pow(2, semitoneShift / 12);
