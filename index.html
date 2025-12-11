@@ -6,7 +6,7 @@
 <title>Sun Synth – Solar Wind Realtime Charts</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 <link rel="stylesheet" href="style.css">
@@ -50,34 +50,127 @@
         <div class="kb-left">
             <div class="container">
                 <div id="keyboardContainer"><!-- la tastiera verrà inserita qui via JS --></div>
-                <div class="preview-box">
-                    <canvas id="chartPreview"></canvas>
+                
+                <div class="preview-controls-wrapper">
+                    <div class="preview-box">
+                        <canvas id="chartPreview"></canvas>
+                    </div>
+                    
+                    <div class="chart-switch-container">
+                        <div class="chart-switch">
+                            <input type="radio" name="chartSource" id="sourceTemp" value="Temp" checked>
+                            <label for="sourceTemp" title="Temperatura">K</label>
+                            
+                            <input type="radio" name="chartSource" id="sourceDens" value="Dens">
+                            <label for="sourceDens" title="Densità">D</label>
+                            
+                            <input type="radio" name="chartSource" id="sourceVel" value="Vel">
+                            <label for="sourceVel" title="Velocità">V</label>
+                            
+                            <div class="switch-slider"></div>
+                        </div>
+                    </div>
+
+                    <!-- One-shot sample controls -->
+                    <div id="sampleControls" style="margin-top:12px; text-align:center;">
+                        <button id="loadSampleBtn" style="padding:6px 10px; font-family: 'Space Mono', monospace;">Carica One-shot</button>
+                        <input id="sampleFileInput" type="file" accept="audio/*" style="display:none">
+                        <label for="sampleRoot" style="margin-left:8px; color:#FFFCF0; font-family:'Space Mono', monospace;">Root MIDI</label>
+                        <input id="sampleRoot" type="number" value="60" min="0" max="127" style="width:60px; margin-left:6px">
+                        <div id="sampleStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:12px; margin-top:6px">Nessun sample caricato</div>
+                    </div>
+                </div>
+                
+                <!-- Effects Panel -->
+                <div class="effects-panel-container">
+                    <!-- Distortion Effect -->
+                    <div class="effect-module">
+                        <div class="effect-title">DISTORTION</div>
+                        <div class="effect-toggle" data-effect="distortion">[ ON/OFF ]</div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Drive</div>
+                            <div class="effect-knob" id="distortionDriveKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Tone</div>
+                            <div class="effect-knob" id="distortionToneKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Mix</div>
+                            <div class="effect-knob" id="distortionMixKnob"></div>
+                        </div>
+                    </div>
+
+                    <!-- Chorus Effect -->
+                    <div class="effect-module">
+                        <div class="effect-title">CHORUS</div>
+                        <div class="effect-toggle" data-effect="chorus">[ ON/OFF ]</div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Depth</div>
+                            <div class="effect-knob" id="chorusDepthKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Rate</div>
+                            <div class="effect-knob" id="chorusRateKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Mix</div>
+                            <div class="effect-knob" id="chorusMixKnob"></div>
+                        </div>
+                    </div>
+
+                    <!-- Delay Effect -->
+                    <div class="effect-module">
+                        <div class="effect-title">DELAY</div>
+                        <div class="effect-toggle" data-effect="delay">[ ON/OFF ]</div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Time</div>
+                            <div class="effect-knob" id="delayTimeKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Feedback</div>
+                            <div class="effect-knob" id="delayFeedbackKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Mix</div>
+                            <div class="effect-knob" id="delayMixKnob"></div>
+                        </div>
+                    </div>
+
+                    <!-- Reverb Effect -->
+                    <div class="effect-module">
+                        <div class="effect-title">REVERB</div>
+                        <div class="effect-toggle" data-effect="reverb">[ ON/OFF ]</div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Decay</div>
+                            <div class="effect-knob" id="reverbDecayKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Mix</div>
+                            <div class="effect-knob" id="reverbMixKnob"></div>
+                        </div>
+                        
+                        <div class="effect-param">
+                            <div class="param-label">Size</div>
+                            <div class="effect-knob" id="reverbSizeKnob"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
             
-            <div class="chart-switch-container">
-                <div class="chart-switch">
-                    <input type="radio" name="chartSource" id="sourceTemp" value="Temp" checked>
-                    <label for="sourceTemp" title="Temperatura">K</label>
-                    
-                    <input type="radio" name="chartSource" id="sourceDens" value="Dens">
-                    <label for="sourceDens" title="Densità">D</label>
-                    
-                    <input type="radio" name="chartSource" id="sourceVel" value="Vel">
-                    <label for="sourceVel" title="Velocità">V</label>
-                    
-                    <div class="switch-slider"></div>
-                </div>
-            </div>
-
-            <!-- One-shot sample controls -->
-            <div id="sampleControls" style="margin-top:12px; text-align:center;">
-                <button id="loadSampleBtn" style="padding:6px 10px; font-family: 'Space Mono', monospace;">Carica One-shot</button>
-                <input id="sampleFileInput" type="file" accept="audio/*" style="display:none">
-                <label for="sampleRoot" style="margin-left:8px; color:#FFFCF0; font-family:'Space Mono', monospace;">Root MIDI</label>
-                <input id="sampleRoot" type="number" value="60" min="0" max="127" style="width:60px; margin-left:6px">
-                <div id="sampleStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:12px; margin-top:6px">Nessun sample caricato</div>
-            </div>
+            <!-- Sun Synth Logo -->
+            <div class="sun-synth-logo">SUN-SYNTH</div>
         </div>
     </div>
 

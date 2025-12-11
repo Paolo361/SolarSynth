@@ -219,10 +219,17 @@ let samplePlayer = null;
 let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
 let sampleLoadedName = null;
 
+// Audio effects chain
+let reverb = null;
+let distortion = null;
+let chorus = null;
+let delay = null;
+let effectsChain = null;
+
 function ensureToneStarted() {
     try {
         if (!mainLimiter) {
-            // Chain: Compressor -> Limiter -> Destination
+            // Chain: Effects -> Compressor -> Limiter -> Destination
             mainLimiter = new Tone.Limiter(-2).toDestination();
             mainCompressor = new Tone.Compressor({
                 threshold: -20,
@@ -340,7 +347,15 @@ function playSampleAtMidi(midi) {
         ensureToneStarted();
 
         // Clone player from buffer to allow overlapping oneshots
-        const temp = new Tone.Player(samplePlayer.buffer).connect(mainCompressor);
+        const temp = new Tone.Player(samplePlayer.buffer);
+        
+        // Route through effects chain if initialized
+        if (effectsChain) {
+            temp.connect(effectsChain);
+        } else {
+            temp.connect(mainCompressor);
+        }
+        
         temp.volume.value = -4; // Reduce individual sample volume to prevent summing overload
         
         // Calculate playback rate for pitch shifting (2^(semitones/12))
@@ -751,6 +766,143 @@ document.addEventListener('DOMContentLoaded', () => {
     // ensure preview height matches keyboard
     syncPreviewHeight();
 
+    // --- Initialize audio effects ---
+    try {
+        // Ensure compressor/limiter exist first
+        ensureToneStarted();
+        
+        // Create effects chain: Delay -> Chorus -> Distortion -> Reverb -> Compressor -> Limiter -> Destination
+        reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).connect(mainCompressor);
+        distortion = new Tone.Distortion({ distortion: 0, wet: 0 }).connect(reverb);
+        chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 }).connect(distortion);
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 }).connect(chorus);
+        
+        // Set effects chain entry point
+        effectsChain = delay;
+        
+        console.log('Effects chain initialized: Delay -> Chorus -> Distortion -> Reverb -> Compressor -> Limiter');
+    } catch (e) {
+        console.error('Failed to initialize effects:', e);
+    }
+
+    // --- Effects knob controls ---
+    try {
+        // Distortion controls
+        setupEffectKnob('distortionDriveKnob', (value) => {
+            if (distortion) distortion.distortion = value;
+        });
+        
+        setupEffectKnob('distortionToneKnob', (value) => {
+            // Oversample quality: 'none', '2x', '4x'
+            // Map 0-1 to quality levels (approximated with distortion curve)
+            // For simplicity, we'll just adjust the distortion amount as a "tone" control
+            if (distortion) distortion.distortion = Math.max(0, distortion.distortion) * (0.5 + value * 0.5);
+        });
+        
+        setupEffectKnob('distortionMixKnob', (value) => {
+            if (distortion) distortion.wet.value = value;
+        });
+
+        // Chorus controls
+        setupEffectKnob('chorusDepthKnob', (value) => {
+            if (chorus) chorus.depth = value;
+        });
+        
+        setupEffectKnob('chorusRateKnob', (value) => {
+            // Map to frequency 0.1Hz - 10Hz
+            if (chorus) chorus.frequency.value = 0.1 + value * 9.9;
+        });
+        
+        setupEffectKnob('chorusMixKnob', (value) => {
+            if (chorus) chorus.wet.value = value;
+        });
+
+        // Delay controls
+        setupEffectKnob('delayTimeKnob', (value) => {
+            // Map to delay time 0.01s - 1s
+            if (delay) delay.delayTime.value = 0.01 + value * 0.99;
+        });
+        
+        setupEffectKnob('delayFeedbackKnob', (value) => {
+            // Feedback 0 - 0.9 (avoid runaway feedback)
+            if (delay) delay.feedback.value = value * 0.9;
+        });
+        
+        setupEffectKnob('delayMixKnob', (value) => {
+            if (delay) delay.wet.value = value;
+        });
+
+        // Reverb controls
+        setupEffectKnob('reverbDecayKnob', (value) => {
+            // Decay time 0.1s - 10s
+            if (reverb) reverb.decay = 0.1 + value * 9.9;
+        });
+        
+        setupEffectKnob('reverbMixKnob', (value) => {
+            if (reverb) reverb.wet.value = value;
+        });
+        
+        setupEffectKnob('reverbSizeKnob', (value) => {
+            // PreDelay acts as "size" - map 0-0.1s
+            if (reverb) reverb.preDelay = value * 0.1;
+        });
+
+        // Toggle buttons
+        document.querySelectorAll('.effect-toggle').forEach(toggle => {
+            toggle.addEventListener('click', function() {
+                this.classList.toggle('active');
+                const effectName = this.getAttribute('data-effect');
+                const isActive = this.classList.contains('active');
+                
+                // Enable/disable effect by setting wet to 0 or restoring last value
+                switch(effectName) {
+                    case 'distortion':
+                        if (distortion) {
+                            if (!isActive) {
+                                distortion._lastWet = distortion.wet.value;
+                                distortion.wet.value = 0;
+                            } else {
+                                distortion.wet.value = distortion._lastWet || 0.5;
+                            }
+                        }
+                        break;
+                    case 'chorus':
+                        if (chorus) {
+                            if (!isActive) {
+                                chorus._lastWet = chorus.wet.value;
+                                chorus.wet.value = 0;
+                            } else {
+                                chorus.wet.value = chorus._lastWet || 0.5;
+                            }
+                        }
+                        break;
+                    case 'delay':
+                        if (delay) {
+                            if (!isActive) {
+                                delay._lastWet = delay.wet.value;
+                                delay.wet.value = 0;
+                            } else {
+                                delay.wet.value = delay._lastWet || 0.5;
+                            }
+                        }
+                        break;
+                    case 'reverb':
+                        if (reverb) {
+                            if (!isActive) {
+                                reverb._lastWet = reverb.wet.value;
+                                reverb.wet.value = 0;
+                            } else {
+                                reverb.wet.value = reverb._lastWet || 0.5;
+                            }
+                        }
+                        break;
+                }
+            });
+        });
+    } catch (e) {
+        console.error('Failed to setup effect knobs:', e);
+    }
+
     // --- Sample UI wiring ---
     try {
         const loadBtn = document.getElementById('loadSampleBtn');
@@ -1060,6 +1212,64 @@ function getCurrentSelectedValue() {
             return Math.max(...ys);
         } catch (e) { return null; }
     }
+
+// Setup generic effect knob with drag interaction
+function setupEffectKnob(knobId, callback) {
+    const knob = document.getElementById(knobId);
+    if (!knob) return;
+    
+    let isDragging = false;
+    let startY = 0;
+    let startValue = 0; // 0 to 1 range
+    
+    // Map knob rotation to effect value (0 -> 1)
+    const updateKnobRotation = (value) => {
+        // value: 0 to 1
+        // rotation: -135deg to 135deg
+        const angle = -135 + value * 270;
+        knob.style.transform = `rotate(${angle}deg)`;
+    };
+    
+    // Initialize at 0 (no effect)
+    updateKnobRotation(0);
+    
+    knob.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        // Get current rotation to determine start value
+        const transform = knob.style.transform;
+        const match = transform.match(/rotate\(([^)]+)deg\)/);
+        if (match) {
+            const angle = parseFloat(match[1]);
+            // Convert angle (-135 to 135) back to value (0 to 1)
+            startValue = (angle + 135) / 270;
+        } else {
+            startValue = 0;
+        }
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaY = startY - e.clientY; // Up is positive
+        const sensitivity = 0.005; // Adjust sensitivity
+        
+        let newValue = startValue + (deltaY * sensitivity);
+        newValue = Math.max(0, Math.min(1, newValue));
+        
+        updateKnobRotation(newValue);
+        callback(newValue);
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = 'default';
+        }
+    });
+}
 
 // Wiring dei controlli UI (knob + play/pause)
 const speedKnobControl = document.getElementById('speedKnobControl');

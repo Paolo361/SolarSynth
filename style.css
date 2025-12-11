@@ -230,6 +230,98 @@
     gap: 20px;
 }
 
+.preview-controls-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Effects Panel Container - positioned to the right of preview */
+.effects-panel-container {
+    display: flex;
+    flex-direction: row;
+    gap: 80px;
+    padding: 10px;
+    margin-left: 80px;
+}
+
+.effect-module {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(21, 21, 21, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 12px 10px;
+    width: 140px;
+    height: 300px;
+}
+
+.effect-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    color: #FFFCF0;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-align: center;
+}
+
+.effect-toggle {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: #FF621F;
+    cursor: pointer;
+    margin-bottom: 12px;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 98, 31, 0.3);
+    border-radius: 4px;
+    transition: all 0.2s;
+    user-select: none;
+}
+
+.effect-toggle:hover {
+    background: rgba(255, 98, 31, 0.1);
+    border-color: rgba(255, 98, 31, 0.6);
+}
+
+.effect-toggle.active {
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.6);
+    background: rgba(52, 211, 153, 0.1);
+}
+
+.effect-param {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 12px;
+    width: 100%;
+}
+
+.param-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: #94a3b8;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+}
+
+.effect-knob {
+    width: 50px;
+    height: 50px;
+    background-image: url('knob.png');
+    background-size: cover;
+    background-position: center;
+    cursor: pointer;
+    transition: filter 0.2s;
+    transform: rotate(-135deg);
+}
+
+.effect-knob:hover {
+    filter: brightness(1.2);
+}
+
 /* force keyboard container to match preview height so both align */
 #keyboardContainer {
     height: 360px;
@@ -396,4 +488,17 @@
     transform: translateX(68px); /* (30px width + 4px gap) * 2 */
     background: linear-gradient(180deg, #34d399 0%, #059669 100%); /* Green for Vel */
     border-color: #34d399;
+}
+
+/* Sun Synth Logo */
+.sun-synth-logo {
+    font-family: "Orbitron", sans-serif;
+    font-size: 100px;
+    font-weight: 900;
+    color: #FFA500;
+    text-align: right;
+    margin-top: -130px;
+    margin-right: -800px;
+    text-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+    letter-spacing: 2px;
 }
