@@ -210,6 +210,7 @@ Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, d
 let toneSynth = null;
 let mainLimiter = null;
 let mainCompressor = null;
+let masterVolume = null;
 let toneStarted = false;
 let lastPlayedMidi = null;
 let lastPlayTime = 0;
@@ -229,7 +230,7 @@ let effectsChain = null;
 function ensureToneStarted() {
     try {
         if (!mainLimiter) {
-            // Chain: Effects -> Compressor -> Limiter -> Destination
+            // Chain: Volume -> Compressor -> Limiter -> Destination
             mainLimiter = new Tone.Limiter(-2).toDestination();
             mainCompressor = new Tone.Compressor({
                 threshold: -20,
@@ -237,8 +238,9 @@ function ensureToneStarted() {
                 attack: 0.01,
                 release: 0.1
             }).connect(mainLimiter);
+            masterVolume = new Tone.Volume(0).connect(mainCompressor);
         }
-        if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(mainCompressor);
+        if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterVolume);
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             // Tone.start() must be called in a user gesture; try to start silently if possible
             Tone.start();
@@ -353,7 +355,7 @@ function playSampleAtMidi(midi) {
         if (effectsChain) {
             temp.connect(effectsChain);
         } else {
-            temp.connect(mainCompressor);
+            temp.connect(masterVolume);
         }
         
         temp.volume.value = -4; // Reduce individual sample volume to prevent summing overload
@@ -771,8 +773,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ensure compressor/limiter exist first
         ensureToneStarted();
         
-        // Create effects chain: Delay -> Chorus -> Distortion -> Reverb -> Compressor -> Limiter -> Destination
-        reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).connect(mainCompressor);
+        // Create effects chain: Delay -> Chorus -> Distortion -> Reverb -> Volume -> Compressor -> Limiter -> Destination
+        reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).connect(masterVolume);
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 }).connect(reverb);
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 }).connect(distortion);
         delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 }).connect(chorus);
@@ -1355,6 +1357,72 @@ if (playPauseBtn) {
             stopHighlighting();
             playPauseBtn.textContent = 'Play';
             isPlaying = false;
+        }
+    });
+}
+
+// Volume knob control
+const volumeKnobControl = document.getElementById('volumeKnobControl');
+const volumeValue = document.getElementById('volumeValue');
+
+if (volumeKnobControl) {
+    let isDragging = false;
+    let startY = 0;
+    let startVolume = 0; // dB value
+    // Min and max volume (dB)
+    const minVolume = -40;
+    const maxVolume = 6;
+    
+    const updateKnobRotation = (volumeDb) => {
+        // Normalize volume to 0-1 range
+        const t = (volumeDb - minVolume) / (maxVolume - minVolume);
+        const angle = -135 + t * 270;
+        volumeKnobControl.style.transform = `rotate(${angle}deg)`;
+    };
+    
+    const setMasterVolume = (volumeDb) => {
+        ensureToneStarted();
+        if (masterVolume) {
+            masterVolume.volume.value = volumeDb;
+        }
+    };
+    
+    // Initialize at 0 dB
+    updateKnobRotation(0);
+    setMasterVolume(0);
+    if (volumeValue) volumeValue.textContent = '0 dB';
+    
+    volumeKnobControl.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startY = e.clientY;
+        startVolume = masterVolume ? masterVolume.volume.value : 0;
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+        
+        if (volumeValue) volumeValue.classList.add('visible');
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        
+        const deltaY = startY - e.clientY;
+        const sensitivity = 0.2; // dB per pixel
+        
+        let newVolume = startVolume + (deltaY * sensitivity);
+        newVolume = Math.max(minVolume, Math.min(maxVolume, newVolume));
+        newVolume = Math.round(newVolume * 10) / 10; // Round to 0.1 dB
+        
+        setMasterVolume(newVolume);
+        updateKnobRotation(newVolume);
+        if (volumeValue) volumeValue.textContent = `${newVolume >= 0 ? '+' : ''}${newVolume.toFixed(1)} dB`;
+    });
+    
+    document.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            document.body.style.cursor = 'default';
+            
+            if (volumeValue) volumeValue.classList.remove('visible');
         }
     });
 }

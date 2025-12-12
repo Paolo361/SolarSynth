@@ -353,7 +353,15 @@
 .knob-label {
     font-family: "Space Mono", monospace;
     font-size: 10px;
-    color: #FFFCF0;
+    color: #e2e8f0;
+    font-weight: bold;
+}
+
+/* Lighter tooltip for volume knob */
+#volumeValue {
+    font-family: "Space Mono", monospace;
+    font-size: 10px;
+    color: #e2e8f0;
     font-weight: bold;
 }
 #playPauseBtn {
