@@ -219,6 +219,13 @@ const playCooldown = 150; // ms between retriggers of same note
 let samplePlayer = null;
 let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
 let sampleLoadedName = null;
+const PRESET_SAMPLES = {
+  Airhorn: 'suoni/Airhorn.wav',
+  Siren: 'suoni/Siren.wav',
+  Subdrop: 'suoni/Subdrop.wav',
+  SweepUp: 'suoni/SweepUp.wav'
+};
+
 
 // Audio effects chain
 let reverb = null;
@@ -294,6 +301,22 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
     }
 }
 
+// Carica uno dei preset interni dalla cartella "suoni"
+async function loadPresetSample(name) {
+  const url = PRESET_SAMPLES[name];
+  if (!url) return;
+
+  // Usa la stessa pipeline di loadSampleFromUrl,
+  // ma passando il nome leggibile come "name"
+  await loadSampleFromUrl(url, sampleRootMidi || 60, name);
+
+  const status = document.getElementById('sampleStatus');
+  if (status && name) {
+    status.textContent = `Sample mode: Preset (${name})`;
+  }
+}
+
+
 // Prompt the user to pick a local audio file and load it as the sample.
 function pickSampleFile(rootMidi = 60, fileInputEl = null) {
     // If a file input element is provided, use it (our UI adds one). Otherwise create temporary.
@@ -303,8 +326,11 @@ function pickSampleFile(rootMidi = 60, fileInputEl = null) {
         const ok = await loadSampleFromUrl(url, rootMidi, f.name);
         if (ok) {
             const status = document.getElementById('sampleStatus');
-            if (status) status.textContent = `Caricato: ${f.name} (root ${sampleRootMidi})`;
+            if (status) {
+                status.textContent = `Sample mode: Manuale (${f.name})`;
+            }
         }
+
     };
 
     if (fileInputEl) {
@@ -1431,6 +1457,16 @@ if (volumeKnobControl) {
    6) TASTIERA VERTICALE – 2 OTTAVE
 ============================================================ */
 
+// Scale musicali di base (intervalli in semitoni dalla tonica)
+const SCALES = {
+  major:           [0, 2, 4, 5, 7, 9, 11],        // maggiore
+  naturalMinor:    [0, 2, 3, 5, 7, 8, 10],        // minore naturale
+  majorPentatonic: [0, 2, 4, 7, 9],               // pentatonica maggiore
+  minorPentatonic: [0, 3, 5, 7, 10],              // pentatonica minore
+  dorian:          [0, 2, 3, 5, 7, 9, 10]         // dorica
+};
+
+
 function drawVerticalKeyboard() {
     const keyboard = document.createElement('div');
     const container = document.getElementById('keyboardContainer') || document.querySelector('.keyboard-box');
@@ -1529,6 +1565,65 @@ function highlightKey(i) {
     keys[i].classList.toggle('selectedKey');
 }
 
+// Applica una scala alla tastiera, in base alla root MIDI
+function applyScaleToKeyboard(scaleName) {
+  const keyboard = document.getElementById('verticalKeyboard');
+  if (!keyboard) return;
+
+  const keys = keyboard.children;
+  const numKeys = keys.length;
+  if (numKeys === 0) return;
+
+  // Pulisce le vecchie evidenziazioni di scala ma lascia la logica del playback
+  for (let i = 0; i < numKeys; i++) {
+    keys[i].classList.remove('scaleKey');
+    // opzionale: rimuovere le selezioni automatiche precedenti
+    keys[i].classList.remove('selectedKey');
+  }
+
+  if (!scaleName || !SCALES[scaleName]) {
+    // Nessuna scala → nessun vincolo
+    return;
+  }
+
+  // Legge la root MIDI dall'input (default 60 se vuoto o non valido)
+  const rootInput = document.getElementById('rootMidiInput');
+  let rootMidi = 60;
+  if (rootInput) {
+    const v = Number(rootInput.value);
+    if (Number.isFinite(v)) rootMidi = v;
+  }
+
+  const intervals = SCALES[scaleName];
+
+  // Costruisce un set di note consentite (MIDI) su tutta la tastiera
+  const allowed = new Set();
+  for (let i = 0; i < numKeys; i++) {
+    const keyEl = keys[i];
+    const midi = Number(keyEl.dataset.midi);
+    if (!Number.isFinite(midi)) continue;
+
+    const diff = midi - rootMidi;
+    const mod12 = ((diff % 12) + 12) % 12; // 0..11
+    if (intervals.includes(mod12)) {
+      allowed.add(midi);
+    }
+  }
+
+  // Evidenzia e seleziona automaticamente le note di scala
+  for (let i = 0; i < numKeys; i++) {
+    const keyEl = keys[i];
+    const midi = Number(keyEl.dataset.midi);
+    if (!Number.isFinite(midi)) continue;
+
+    if (allowed.has(midi)) {
+      keyEl.classList.add('scaleKey');
+      keyEl.classList.add('selectedKey'); // così sono subito attive
+    }
+  }
+}
+
+
 function quantizeHighlightToKey() {
     const keyboard = document.getElementById('verticalKeyboard');
     const keys = keyboard.children;
@@ -1586,6 +1681,7 @@ function indexToTime(chart, idx) {
 }
 
 
+
 // Disegno al load
 drawVerticalKeyboard();
 
@@ -1593,6 +1689,34 @@ drawVerticalKeyboard();
 updateCharts();
 setInterval(updateCharts, 60_000);
 
+// Select dei preset di one-shot
+const presetSelect = document.getElementById('presetSampleSelect');
+if (presetSelect) {
+  presetSelect.addEventListener('change', (e) => {
+    const name = e.target.value;
+    const status = document.getElementById('sampleStatus');
+
+    if (!name) {
+      // torna a "nessun sample"
+      samplePlayer = null;
+      sampleLoadedName = null;
+      if (status) status.textContent = 'Sample mode: nessun sample';
+      return;
+    }
+
+    loadPresetSample(name);
+  });
+}
+
+
+// Select delle scale
+const scaleSelect = document.getElementById('scaleSelect');
+if (scaleSelect) {
+  scaleSelect.addEventListener('change', (e) => {
+    const value = e.target.value || '';
+    applyScaleToKeyboard(value);
+  });
+}
 
 
 // Carica il sample di default

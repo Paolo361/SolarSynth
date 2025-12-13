@@ -78,13 +78,29 @@
 
                     <!-- One-shot sample controls -->
                     <div id="sampleControls" style="margin-top:12px; text-align:center;">
+                        <select id="presetSampleSelect">
+                            <option value="">Nessun sample</option>
+                            <option value="Airhorn">Airhorn</option>
+                            <option value="Siren">Siren</option>
+                            <option value="Subdrop">Subdrop</option>
+                            <option value="SweepUp">Sweep Up</option>
+                        </select>
                         <button id="loadSampleBtn" style="padding:6px 10px; font-family: 'Space Mono', monospace;">Carica One-shot</button>
                         <input id="sampleFileInput" type="file" accept="audio/*" style="display:none">
                         <label for="sampleRoot" style="margin-left:8px; color:#FFFCF0; font-family:'Space Mono', monospace;">Root MIDI</label>
                         <input id="sampleRoot" type="number" value="60" min="0" max="127" style="width:60px; margin-left:6px">
-                        <div id="sampleStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:12px; margin-top:6px">Nessun sample caricato</div>
+                        <select id="scaleSelect">
+                            <option value="">Nessuna scala</option>
+                            <option value="major">Maggiore</option>
+                            <option value="naturalMinor">Minore naturale</option>
+                            <option value="majorPentatonic">Pentatonica maggiore</option>
+                            <option value="minorPentatonic">Pentatonica minore</option>
+                            <option value="dorian">Dorica</option>
+                        </select>
+                        <div id="sampleStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:12px; margin-top:6px">Sample Mode: nessun sample </div>
                     </div>
                 </div>
+                
                 
                 <!-- Effects Panel -->
                 <div class="effects-panel-container">

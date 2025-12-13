@@ -146,6 +146,36 @@
         background-color: #ff621f;
     }
 
+    /* Note che appartengono alla scala scelta */
+    .scaleKey {
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.9); /* azzurro brillante */
+        outline: 2px solid rgba(56, 189, 248, 0.9);
+    }
+    
+    /* Select per suoni e scale: stesso look */
+#presetSampleSelect,
+#scaleSelect {
+    font-family: "Space Mono", monospace;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.6);
+    background: #0f172a;
+    color: #FFFCF0;
+}
+
+/* Spaziatura orizzontale coerente */
+#presetSampleSelect {
+    margin-right: 8px;
+}
+
+#scaleSelect {
+    margin-left: 8px;
+}
+
+
+
+
     .hoveredKey {
         background-color: #fbbf24;
     }
