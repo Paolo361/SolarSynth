@@ -98,6 +98,16 @@
                             <option value="dorian">Dorica</option>
                         </select>
                         <div id="sampleStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:12px; margin-top:6px">Sample Mode: nessun sample </div>
+                        
+                        <!-- MIDI Output Controls -->
+                        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                            <label for="midiOutputSelect" style="color:#FFFCF0; font-family:'Space Mono', monospace; font-size:12px;">MIDI Output:</label>
+                            <select id="midiOutputSelect" style="margin-left: 8px; padding: 4px; font-family: 'Space Mono', monospace;">
+                                <option value="">-- Nessuno --</option>
+                            </select>
+                            <button id="midiToggleBtn" style="padding:6px 10px; font-family: 'Space Mono', monospace; margin-left: 8px; display: none;">Attiva MIDI</button>
+                            <div id="midiStatus" style="color:#94a3b8; font-family:'Space Mono', monospace; font-size:11px; margin-top:6px;">MIDI: inattivo</div>
+                        </div>
                     </div>
                 </div>
                 

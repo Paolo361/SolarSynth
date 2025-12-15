@@ -226,6 +226,10 @@ const PRESET_SAMPLES = {
   SweepUp: 'suoni/SweepUp.wav'
 };
 
+// MIDI Output variables
+let midiOutput = null;
+let midiEnabled = false;
+let currentMidiNote = null;
 
 // Audio effects chain
 let reverb = null;
@@ -255,6 +259,97 @@ function ensureToneStarted() {
         }
     } catch (e) {
         console.warn('Tone.js not available or failed to start', e);
+    }
+}
+
+// ============================================================
+// MIDI OUTPUT FUNCTIONS
+// ============================================================
+
+// Request MIDI access and populate output devices
+async function initMidiAccess() {
+    try {
+        console.log('Requesting MIDI access...');
+        const midiAccess = await navigator.requestMIDIAccess();
+        console.log('MIDI access granted');
+        
+        const outputs = midiAccess.outputs.values();
+        const selectEl = document.getElementById('midiOutputSelect');
+        const toggleBtn = document.getElementById('midiToggleBtn');
+        const statusEl = document.getElementById('midiStatus');
+        
+        console.log('MIDI outputs:', midiAccess.outputs);
+        
+        let hasOutputs = false;
+        for (let output of outputs) {
+            hasOutputs = true;
+            console.log('Found MIDI output:', output.name, 'ID:', output.id);
+            const option = document.createElement('option');
+            option.value = output.id;
+            option.textContent = output.name;
+            selectEl.appendChild(option);
+        }
+        
+        if (hasOutputs) {
+            toggleBtn.style.display = 'inline-block';
+            statusEl.textContent = 'MIDI: dispositivi trovati ✓';
+            console.log('MIDI devices found successfully');
+        } else {
+            statusEl.textContent = 'MIDI: nessun dispositivo trovato';
+            console.warn('No MIDI outputs found. Make sure Minilogue XD is connected and turned on.');
+        }
+        
+        return midiAccess;
+    } catch (e) {
+        console.error('Web MIDI API not supported or access denied:', e);
+        document.getElementById('midiStatus').textContent = 'MIDI: non supportato o accesso negato';
+        return null;
+    }
+}
+
+// Send MIDI Note On message
+function sendMidiNoteOn(noteNumber, velocity = 100, channel = 0) {
+    if (!midiOutput) return;
+    
+    const noteOnMessage = [0x90 + channel, noteNumber, velocity]; // Note On
+    try {
+        midiOutput.send(noteOnMessage);
+        currentMidiNote = noteNumber;
+    } catch (e) {
+        console.error('Failed to send MIDI Note On:', e);
+    }
+}
+
+// Send MIDI Note Off message
+function sendMidiNoteOff(noteNumber, channel = 0) {
+    if (!midiOutput) return;
+    
+    const noteOffMessage = [0x80 + channel, noteNumber, 0]; // Note Off
+    try {
+        midiOutput.send(noteOffMessage);
+    } catch (e) {
+        console.error('Failed to send MIDI Note Off:', e);
+    }
+}
+
+// Play MIDI note on Minilogue XD
+function playMidiNote(midiNumber) {
+    if (!midiEnabled || !midiOutput) return;
+    
+    // Stop previous note if different
+    if (currentMidiNote !== null && currentMidiNote !== midiNumber) {
+        sendMidiNoteOff(currentMidiNote);
+    }
+    
+    // Play new note
+    sendMidiNoteOn(midiNumber, 100);
+}
+
+// Stop MIDI note
+function stopMidiNote() {
+    if (currentMidiNote !== null) {
+        sendMidiNoteOff(currentMidiNote);
+        currentMidiNote = null;
     }
 }
 
@@ -428,20 +523,24 @@ function playMidiIfSelected(midi) {
     // play only if key was previously toggled selected by user
     if (!keyEl.classList.contains('selectedKey')) return;
 
-    // Only play if a one-shot sample is loaded (no synth fallback)
-    if (!samplePlayer || !samplePlayer.buffer) return;
-
     try {
+        // If MIDI output is enabled, send MIDI note instead of playing sample
+        if (midiEnabled && midiOutput) {
+            playMidiNote(midi);
+            lastPlayedMidi = midi;
+            lastPlayTime = now;
+            // transient highlight
+            try { keyEl.classList.add('playingKey'); setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
+            return;
+        }
+
+        // Otherwise, play loaded one-shot sample (if any)
+        if (!samplePlayer || !samplePlayer.buffer) return;
         playSampleAtMidi(midi);
         lastPlayedMidi = midi;
         lastPlayTime = now;
         // add transient playing highlight to the DOM key
-        try {
-            if (keyEl) {
-                keyEl.classList.add('playingKey');
-                setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220);
-            }
-        } catch (e) { /* ignore UI errors */ }
+        try { keyEl.classList.add('playingKey'); setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
     } catch (e) {
         console.warn('Error playing note', e);
     }
@@ -484,7 +583,17 @@ function triggerPlayWithFallback(requestedMidi) {
         // play nearest selected
         try {
             const midi = Number(nearest.dataset.midi);
-            // Only play if a one-shot sample is loaded (no synth fallback)
+            // If MIDI output is enabled, send MIDI instead of playing sample
+            if (midiEnabled && midiOutput) {
+                playMidiNote(midi);
+                // transient highlight
+                try { nearest.classList.add('playingKey'); setTimeout(() => { try { nearest.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
+                lastPlayedMidi = midi;
+                lastPlayTime = Date.now();
+                return;
+            }
+
+            // Otherwise only play if a one-shot sample is loaded (no synth fallback)
             if (!samplePlayer || !samplePlayer.buffer) return;
             playSampleAtMidi(midi);
             // transient highlight
@@ -734,6 +843,10 @@ function processMovingDotForIndex(idx) {
                         const el = keyboard.children[k];
                         if (el && el.dataset && Number(el.dataset.midi) === midi) {
                             el.classList.add('quantizedKey');
+                            
+                            // Send MIDI to Minilogue XD if enabled
+                            playMidiNote(midi);
+                            
                             // attempt to play the requested midi; if not selected, fallback to nearest selected
                             triggerPlayWithFallback(midi);
                             break;
@@ -793,6 +906,56 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ensure preview height matches keyboard
     syncPreviewHeight();
+
+    // --- Initialize MIDI Output ---
+    try {
+        initMidiAccess().then(midiAccess => {
+            const selectEl = document.getElementById('midiOutputSelect');
+            const toggleBtn = document.getElementById('midiToggleBtn');
+            const statusEl = document.getElementById('midiStatus');
+            
+            if (selectEl && toggleBtn) {
+                selectEl.addEventListener('change', (e) => {
+                    const selectedId = e.target.value;
+                    if (selectedId && midiAccess) {
+                        midiOutput = midiAccess.outputs.get(selectedId);
+                        if (midiOutput) {
+                            statusEl.textContent = `MIDI: ${midiOutput.name} selezionato`;
+                            toggleBtn.disabled = false;
+                        }
+                    } else {
+                        midiOutput = null;
+                        midiEnabled = false;
+                        toggleBtn.textContent = 'Attiva MIDI';
+                        toggleBtn.disabled = true;
+                        statusEl.textContent = 'MIDI: nessun dispositivo selezionato';
+                    }
+                });
+                
+                toggleBtn.addEventListener('click', () => {
+                    if (!midiOutput) return;
+                    
+                    midiEnabled = !midiEnabled;
+                    if (midiEnabled) {
+                        toggleBtn.textContent = 'Disattiva MIDI';
+                        statusEl.textContent = `MIDI: attivo → ${midiOutput.name}`;
+                        toggleBtn.style.background = 'rgba(52, 211, 153, 0.2)';
+                        toggleBtn.style.color = '#34d399';
+                        toggleBtn.style.borderColor = 'rgba(52, 211, 153, 0.6)';
+                    } else {
+                        toggleBtn.textContent = 'Attiva MIDI';
+                        statusEl.textContent = 'MIDI: disattivo';
+                        toggleBtn.style.background = '';
+                        toggleBtn.style.color = '';
+                        toggleBtn.style.borderColor = '';
+                        stopMidiNote();
+                    }
+                });
+            }
+        });
+    } catch (e) {
+        console.error('Failed to initialize MIDI:', e);
+    }
 
     // --- Initialize audio effects ---
     try {
@@ -1170,6 +1333,10 @@ function stopHighlighting() {
         const keyboard = document.getElementById('verticalKeyboard');
         if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
     } catch (e) {}
+    // If MIDI is enabled, ensure last held note is turned off
+    try {
+        if (midiEnabled) stopMidiNote();
+    } catch (e) {}
     updateHighlightRender();
 }
 
@@ -1305,29 +1472,42 @@ const speedValue = document.getElementById('speedValue');
 const playPauseBtn = document.getElementById('playPauseBtn');
 let isPlaying = false;
 
+// Utility functions for BPM conversion
+// BPM = 60000 / (ms per beat)
+// ms per beat = 60000 / BPM
+function msToBpm(ms) {
+    return Math.round(60000 / ms);
+}
+
+function bpmToMs(bpm) {
+    return Math.round(60000 / bpm);
+}
+
 // Knob logic
 if (speedKnobControl) {
     let isDragging = false;
     let startY = 0;
     let startSpeed = highlightSpeed;
-    // Min and max speed values (ms) - inverted logic: lower ms = faster
-    const minSpeed = 20;
-    const maxSpeed = 200;
+    // Min and max BPM: 80 - 190 BPM
+    // 80 BPM = 750 ms per beat
+    // 190 BPM = 316 ms per beat
+    const minBpm = 80;
+    const maxBpm = 190;
+    const minSpeed = bpmToMs(maxBpm); // 190 BPM = ~316 ms (fastest)
+    const maxSpeed = bpmToMs(minBpm); // 80 BPM = 750 ms (slowest)
     
     // Initial rotation based on current speed
     // Map speed (maxSpeed -> minSpeed) to rotation (-135 -> 135 degrees)
-    // 200ms (slow) -> -135deg
-    // 20ms (fast) -> 135deg
     const updateKnobRotation = (speed) => {
-        // Normalize speed to 0-1 range (inverted because lower is faster)
-        // 200 -> 0, 20 -> 1
+        // Normalize speed to 0-1 range (inverted because lower ms = faster BPM)
         const t = 1 - (speed - minSpeed) / (maxSpeed - minSpeed);
         const angle = -135 + t * 270;
         speedKnobControl.style.transform = `rotate(${angle}deg)`;
     };
 
     updateKnobRotation(highlightSpeed);
-    if (speedValue) speedValue.textContent = `${highlightSpeed} ms`;
+    const initialBpm = msToBpm(highlightSpeed);
+    if (speedValue) speedValue.textContent = `${initialBpm} BPM`;
 
     speedKnobControl.addEventListener('mousedown', (e) => {
         isDragging = true;
@@ -1347,8 +1527,8 @@ if (speedKnobControl) {
         const sensitivity = 2; // Pixels per ms change
         
         // Calculate new speed
-        // Dragging up (positive delta) should decrease ms (faster)
-        // Dragging down (negative delta) should increase ms (slower)
+        // Dragging up (positive delta) should decrease ms (faster = higher BPM)
+        // Dragging down (negative delta) should increase ms (slower = lower BPM)
         let newSpeed = startSpeed - (deltaY * sensitivity);
         
         // Clamp values
@@ -1358,7 +1538,8 @@ if (speedKnobControl) {
         if (newSpeed !== highlightSpeed) {
             setHighlightSpeed(newSpeed);
             updateKnobRotation(newSpeed);
-            if (speedValue) speedValue.textContent = `${newSpeed} ms`;
+            const bpm = msToBpm(newSpeed);
+            if (speedValue) speedValue.textContent = `${bpm} BPM`;
         }
     });
 
