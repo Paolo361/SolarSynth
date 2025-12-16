@@ -217,7 +217,6 @@ let lastPlayTime = 0;
 const playCooldown = 150; // ms between retriggers of same note
 // Optional sample player for oneshot sample mapping
 let samplePlayer = null;
-let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
 let sampleLoadedName = null;
 const PRESET_SAMPLES = {
   Airhorn: 'suoni/Airhorn.wav',
@@ -416,7 +415,7 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
         // Manually set the buffer
         samplePlayer.buffer.set(audioBuffer);
         
-        sampleRootMidi = Number(rootMidi) || 60;
+        const sampleRootMidi = Number(rootMidi) || 60;
         sampleLoadedName = name || url;
         console.log('Sample loaded successfully. Name:', name, 'Root MIDI:', sampleRootMidi, 'Buffer channels:', audioBuffer.numberOfChannels, 'Duration:', audioBuffer.duration);
         return true;
@@ -435,7 +434,8 @@ async function loadPresetSample(name) {
 
   // Usa la stessa pipeline di loadSampleFromUrl,
   // ma passando il nome leggibile come "name"
-  await loadSampleFromUrl(url, sampleRootMidi || 60, name);
+  const rootMidi = 60; // Fixed root MIDI (C4) for all samples
+  await loadSampleFromUrl(url, rootMidi, name);
 
   const status = document.getElementById('sampleStatus');
   if (status && name) {
@@ -493,7 +493,7 @@ function playSampleAtMidi(midi) {
             console.warn('No sample loaded or buffer missing');
             return false;
         }
-        const root = Number(sampleRootMidi) || 60;
+        const root = 60; // Fixed root MIDI (C4)
         const semitoneShift = midi - root;
 
         console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
@@ -1126,39 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Failed to setup effect knobs:', e);
     }
 
-    // --- Sample UI wiring ---
-    try {
-        const loadBtn = document.getElementById('loadSampleBtn');
-        const fileInput = document.getElementById('sampleFileInput');
-        const rootInput = document.getElementById('sampleRoot');
-        const status = document.getElementById('sampleStatus');
-
-        if (loadBtn && fileInput) {
-            loadBtn.addEventListener('click', (e) => {
-                // use the visible root value when opening picker
-                const root = rootInput ? Number(rootInput.value) || 60 : 60;
-                pickSampleFile(root, fileInput);
-            });
-        }
-
-        if (fileInput) {
-            fileInput.addEventListener('change', async (ev) => {
-                const f = ev.target.files && ev.target.files[0];
-                if (f) {
-                    await loadSampleFromUrl(URL.createObjectURL(f), Number(rootInput ? rootInput.value : 60) || 60, f.name);
-                    if (status) status.textContent = `Caricato: ${f.name} (root ${sampleRootMidi})`;
-                }
-            });
-        }
-
-        if (rootInput) {
-            rootInput.addEventListener('change', (e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v)) sampleRootMidi = v;
-                if (status && sampleLoadedName) status.textContent = `Caricato: ${sampleLoadedName} (root ${sampleRootMidi})`;
-            });
-        }
-    } catch (e) { /* ignore UI wiring errors */ }
+    // --- Sample UI wiring removed (one-shot loading from PC removed) ---
 });
 
 window.addEventListener('resize', () => {
