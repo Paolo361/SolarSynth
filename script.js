@@ -607,6 +607,8 @@ function triggerPlayWithFallback(requestedMidi) {
     }
 }
 
+let xSpacing = 5; // global spacing for advanceHighlight
+
 function createChart(canvasId, color, isPreview = false) {
     const chart = new Chart(document.getElementById(canvasId), {
         type: "line",
@@ -694,6 +696,8 @@ function createChart(canvasId, color, isPreview = false) {
             }
         }
     });
+
+
     
     // mark preview chart for horizontal sections rendering
     if (isPreview) chart.isHorizontalSections = true;
@@ -888,7 +892,6 @@ function getKeyIndexFromValue(value, maxValue, minValue) {
     let keyIndex = Math.floor(ratio * numKeys);
     // clamp to valid range
     keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
-    console.log("Key index from value:", keyIndex);
     return keyIndex;
 
 }
@@ -1240,6 +1243,13 @@ async function updateCharts() {
         const radio = document.querySelector('input[name="chartSource"]:checked');
         if (radio) updatePreview(radio.value);
 
+        console.log("realHighlightIndex before adjust:", xSpacing, realHighlightIndex);
+        realHighlightIndex = realHighlightIndex - xSpacing - 1;
+        highlightIndex = realHighlightIndex;
+        console.log("realHighlightIndex after adjust:", realHighlightIndex);
+        advanceHighlight(); // riavanza l'highlight alla nuova posizione
+
+        console.log("maxX, minX, xSpacing, Num:", maxX, minX, xSpacing, NUM);
     } catch (e) {
         console.error("Errore fetching NOAA:", e);
     }
@@ -1270,23 +1280,23 @@ function updateHighlightRender() {
 let realHighlightIndex = -1;
 
 function advanceHighlight() {
-    const len = chartTemp.data.datasets[0].data.length;
+    const len = chartTemp.data.datasets[0].data.length + xSpacing;
     if (!len) return;
 
     let next = highlightIndex;
     for (let i = 0; i < len; i++) {
         next = (next + 1) % len;
-        if (isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
+        if (true || isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
             highlightIndex = next;
             realHighlightIndex = next;
             currIdxTime = indexToTime(chartTemp, highlightIndex);
-            console.log("highlightIndexTime:", currIdxTime, "vs", highlightIndexTime);
             if(currIdxTime !== highlightIndexTime) {
                 highlightIndexTime = currIdxTime;
                 // process the moving marker: detect original points near it and trigger highlights/notes
                 processMovingDotForIndex(highlightIndex);
             }
             updateHighlightRender();
+            console.log("realHighlightIndex: ", realHighlightIndex); 
             return;
         }
     }
@@ -1842,7 +1852,6 @@ function indexToTime(chart, idx) {
         const date = new Date(point.x);
         // Formatta in HH:mm
         const timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        console.log("Orario corrente:", timeStr);
         return timeStr;
     }
 

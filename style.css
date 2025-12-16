@@ -148,8 +148,6 @@
 
     /* Note che appartengono alla scala scelta */
     .scaleKey {
-        box-shadow: 0 0 8px rgba(56, 189, 248, 0.9); /* azzurro brillante */
-        outline: 2px solid rgba(56, 189, 248, 0.9);
     }
     
 /* Select per suoni e scale e root note: stesso look */
