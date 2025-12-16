@@ -1746,62 +1746,49 @@ function highlightKey(i) {
     keys[i].classList.toggle('selectedKey');
 }
 
-// Applica una scala alla tastiera, in base alla root MIDI
-function applyScaleToKeyboard(scaleName) {
-  const keyboard = document.getElementById('verticalKeyboard');
-  if (!keyboard) return;
+function applyScaleToKeyboard() {
+    const keyboard = document.getElementById('verticalKeyboard');
+    if (!keyboard) return;
+    
+    const keys = keyboard.children;
+    const numKeys = keys.length;
 
-  const keys = keyboard.children;
-  const numKeys = keys.length;
-  if (numKeys === 0) return;
+    // 1. Recupera la scala scelta
+    const scaleSelect = document.getElementById('scaleSelect');
+    const scaleName = scaleSelect ? scaleSelect.value : '';
 
-  // Pulisce le vecchie evidenziazioni di scala ma lascia la logica del playback
-  for (let i = 0; i < numKeys; i++) {
-    keys[i].classList.remove('scaleKey');
-    // opzionale: rimuovere le selezioni automatiche precedenti
-    keys[i].classList.remove('selectedKey');
-  }
+    // 2. Recupera la nota fondamentale (Root) scelta (0=C, 1=C#, ecc.)
+    const rootNoteSelect = document.getElementById('rootNoteSelect');
+    // Se non esiste ancora il selettore, usa 0 (Do) come default
+    const rootValue = rootNoteSelect ? parseInt(rootNoteSelect.value) : 0; 
 
-  if (!scaleName || !SCALES[scaleName]) {
-    // Nessuna scala → nessun vincolo
-    return;
-  }
-
-  // Legge la root MIDI dall'input (default 60 se vuoto o non valido)
-  const rootInput = document.getElementById('rootMidiInput');
-  let rootMidi = 60;
-  if (rootInput) {
-    const v = Number(rootInput.value);
-    if (Number.isFinite(v)) rootMidi = v;
-  }
-
-  const intervals = SCALES[scaleName];
-
-  // Costruisce un set di note consentite (MIDI) su tutta la tastiera
-  const allowed = new Set();
-  for (let i = 0; i < numKeys; i++) {
-    const keyEl = keys[i];
-    const midi = Number(keyEl.dataset.midi);
-    if (!Number.isFinite(midi)) continue;
-
-    const diff = midi - rootMidi;
-    const mod12 = ((diff % 12) + 12) % 12; // 0..11
-    if (intervals.includes(mod12)) {
-      allowed.add(midi);
+    // Pulisce le vecchie evidenziazioni
+    for (let i = 0; i < numKeys; i++) {
+        keys[i].classList.remove('scaleKey');
+        keys[i].classList.remove('selectedKey');
     }
-  }
 
-  // Evidenzia e seleziona automaticamente le note di scala
-  for (let i = 0; i < numKeys; i++) {
-    const keyEl = keys[i];
-    const midi = Number(keyEl.dataset.midi);
-    if (!Number.isFinite(midi)) continue;
+    // Se non è selezionata nessuna scala valida, esci
+    if (!scaleName || !SCALES[scaleName]) return;
 
-    if (allowed.has(midi)) {
-      keyEl.classList.add('scaleKey');
-      keyEl.classList.add('selectedKey'); // così sono subito attive
+    const intervals = SCALES[scaleName];
+
+    // Evidenzia le note corrette
+    for (let i = 0; i < numKeys; i++) {
+        const keyEl = keys[i];
+        const midi = Number(keyEl.dataset.midi);
+        
+        if (!Number.isFinite(midi)) continue;
+
+        // Calcolo: (NotaMidi - RootScelta + 12) % 12 ci dice l'intervallo relativo
+        const noteClass = midi % 12;
+        const intervalFromRoot = (noteClass - rootValue + 12) % 12;
+
+        if (intervals.includes(intervalFromRoot)) {
+            keyEl.classList.add('scaleKey');
+            keyEl.classList.add('selectedKey');
+        }
     }
-  }
 }
 
 
@@ -1890,13 +1877,20 @@ if (presetSelect) {
 }
 
 
-// Select delle scale
-const scaleSelect = document.getElementById('scaleSelect');
-if (scaleSelect) {
-  scaleSelect.addEventListener('change', (e) => {
-    const value = e.target.value || '';
-    applyScaleToKeyboard(value);
-  });
+// Listener cambio SCALA
+const scaleSelectEl = document.getElementById('scaleSelect');
+if (scaleSelectEl) {
+    scaleSelectEl.addEventListener('change', () => {
+        applyScaleToKeyboard();
+    });
+}
+
+// Listener cambio NOTA (Root)
+const rootNoteSelectEl = document.getElementById('rootNoteSelect');
+if (rootNoteSelectEl) {
+    rootNoteSelectEl.addEventListener('change', () => {
+        applyScaleToKeyboard();
+    });
 }
 
 

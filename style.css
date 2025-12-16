@@ -152,9 +152,10 @@
         outline: 2px solid rgba(56, 189, 248, 0.9);
     }
     
-    /* Select per suoni e scale: stesso look */
+/* Select per suoni e scale e root note: stesso look */
 #presetSampleSelect,
-#scaleSelect {
+#scaleSelect,
+#rootNoteSelect {
     font-family: "Space Mono", monospace;
     font-size: 12px;
     padding: 4px 8px;
@@ -163,6 +164,11 @@
     background: #0f172a;
     color: #FFFCF0;
 }
+
+/* Margini per distanziare i selettori */
+#presetSampleSelect { margin-right: 8px; }
+#scaleSelect { margin-left: 8px; }
+#rootNoteSelect { margin-left: 8px; }
 
 /* Spaziatura orizzontale coerente */
 #presetSampleSelect {
