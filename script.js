@@ -221,9 +221,9 @@ let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
 let sampleLoadedName = null;
 const PRESET_SAMPLES = {
   Airhorn: 'suoni/Airhorn.wav',
-  Siren: 'suoni/Siren.wav',
-  Subdrop: 'suoni/Subdrop.wav',
-  SweepUp: 'suoni/SweepUp.wav'
+  figli_delle_stelle: 'suoni/figli_delle_stelle.wav',
+  fuoco: 'suoni/fuoco.wav',
+  magma: 'suoni/magma.wav'
 };
 
 // MIDI Output variables
