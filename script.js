@@ -217,13 +217,12 @@ let lastPlayTime = 0;
 const playCooldown = 150; // ms between retriggers of same note
 // Optional sample player for oneshot sample mapping
 let samplePlayer = null;
-let sampleRootMidi = 60; // MIDI note that sample is recorded at (default C4)
 let sampleLoadedName = null;
 const PRESET_SAMPLES = {
   Airhorn: 'suoni/Airhorn.wav',
-  Siren: 'suoni/Siren.wav',
-  Subdrop: 'suoni/Subdrop.wav',
-  SweepUp: 'suoni/SweepUp.wav'
+  figli_delle_stelle: 'suoni/figli_delle_stelle.wav',
+  fuoco: 'suoni/fuoco.wav',
+  magma: 'suoni/magma.wav'
 };
 
 // MIDI Output variables
@@ -270,39 +269,71 @@ function ensureToneStarted() {
 async function initMidiAccess() {
     try {
         console.log('Requesting MIDI access...');
-        const midiAccess = await navigator.requestMIDIAccess();
+        // Richiediamo anche sysex: true per massima compatibilità
+        const midiAccess = await navigator.requestMIDIAccess({ sysex: true });
         console.log('MIDI access granted');
         
-        const outputs = midiAccess.outputs.values();
         const selectEl = document.getElementById('midiOutputSelect');
         const toggleBtn = document.getElementById('midiToggleBtn');
         const statusEl = document.getElementById('midiStatus');
-        
-        console.log('MIDI outputs:', midiAccess.outputs);
-        
-        let hasOutputs = false;
-        for (let output of outputs) {
-            hasOutputs = true;
-            console.log('Found MIDI output:', output.name, 'ID:', output.id);
-            const option = document.createElement('option');
-            option.value = output.id;
-            option.textContent = output.name;
-            selectEl.appendChild(option);
-        }
-        
-        if (hasOutputs) {
-            toggleBtn.style.display = 'inline-block';
-            statusEl.textContent = 'MIDI: dispositivi trovati ✓';
-            console.log('MIDI devices found successfully');
-        } else {
-            statusEl.textContent = 'MIDI: nessun dispositivo trovato';
-            console.warn('No MIDI outputs found. Make sure Minilogue XD is connected and turned on.');
-        }
+
+        // Funzione interna per aggiornare la lista (da chiamare all'avvio e ai cambiamenti)
+        const updateMidiList = () => {
+            // Salva la selezione corrente se c'è
+            const currentSelection = selectEl.value;
+            
+            // Pulisci la lista mantenendo l'opzione di default
+            selectEl.innerHTML = '<option value="">-- Nessuno --</option>';
+            
+            const outputs = midiAccess.outputs.values();
+            let hasOutputs = false;
+            let deviceFoundAgain = false;
+
+            for (let output of outputs) {
+                hasOutputs = true;
+                // Filtra per non mostrare porte inutili (opzionale, rimuovi if se vuoi vedere tutto)
+                // if (output.name.includes("CTRL")) continue; 
+
+                const option = document.createElement('option');
+                option.value = output.id;
+                option.textContent = output.name;
+                selectEl.appendChild(option);
+
+                // Se la porta che avevamo selezionato esiste ancora, riselezionala
+                if (output.id === currentSelection) {
+                    option.selected = true;
+                    deviceFoundAgain = true;
+                }
+            }
+
+            if (hasOutputs) {
+                toggleBtn.style.display = 'inline-block';
+                if (!deviceFoundAgain && currentSelection !== "") {
+                     // Il dispositivo selezionato è stato scollegato
+                     statusEl.textContent = 'MIDI: Dispositivo scollegato';
+                     midiOutput = null; // Reset variabile globale
+                }
+            } else {
+                statusEl.textContent = 'MIDI: nessun dispositivo trovato';
+            }
+        };
+
+        // 1. Popola la lista subito
+        updateMidiList();
+
+        // 2. Ascolta i cambiamenti (Hot-plugging)
+        // Se accendi il synth DOPO aver aperto il sito, questo lo rileverà
+        midiAccess.onstatechange = (e) => {
+            console.log("MIDI State Change:", e.port.name, e.port.state);
+            updateMidiList();
+        };
         
         return midiAccess;
+
     } catch (e) {
         console.error('Web MIDI API not supported or access denied:', e);
-        document.getElementById('midiStatus').textContent = 'MIDI: non supportato o accesso negato';
+        const statusEl = document.getElementById('midiStatus');
+        if(statusEl) statusEl.textContent = 'MIDI: Errore o accesso negato';
         return null;
     }
 }
@@ -384,7 +415,7 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
         // Manually set the buffer
         samplePlayer.buffer.set(audioBuffer);
         
-        sampleRootMidi = Number(rootMidi) || 60;
+        const sampleRootMidi = Number(rootMidi) || 60;
         sampleLoadedName = name || url;
         console.log('Sample loaded successfully. Name:', name, 'Root MIDI:', sampleRootMidi, 'Buffer channels:', audioBuffer.numberOfChannels, 'Duration:', audioBuffer.duration);
         return true;
@@ -403,7 +434,8 @@ async function loadPresetSample(name) {
 
   // Usa la stessa pipeline di loadSampleFromUrl,
   // ma passando il nome leggibile come "name"
-  await loadSampleFromUrl(url, sampleRootMidi || 60, name);
+  const rootMidi = 60; // Fixed root MIDI (C4) for all samples
+  await loadSampleFromUrl(url, rootMidi, name);
 
   const status = document.getElementById('sampleStatus');
   if (status && name) {
@@ -461,7 +493,7 @@ function playSampleAtMidi(midi) {
             console.warn('No sample loaded or buffer missing');
             return false;
         }
-        const root = Number(sampleRootMidi) || 60;
+        const root = 60; // Fixed root MIDI (C4)
         const semitoneShift = midi - root;
 
         console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
@@ -1097,39 +1129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Failed to setup effect knobs:', e);
     }
 
-    // --- Sample UI wiring ---
-    try {
-        const loadBtn = document.getElementById('loadSampleBtn');
-        const fileInput = document.getElementById('sampleFileInput');
-        const rootInput = document.getElementById('sampleRoot');
-        const status = document.getElementById('sampleStatus');
-
-        if (loadBtn && fileInput) {
-            loadBtn.addEventListener('click', (e) => {
-                // use the visible root value when opening picker
-                const root = rootInput ? Number(rootInput.value) || 60 : 60;
-                pickSampleFile(root, fileInput);
-            });
-        }
-
-        if (fileInput) {
-            fileInput.addEventListener('change', async (ev) => {
-                const f = ev.target.files && ev.target.files[0];
-                if (f) {
-                    await loadSampleFromUrl(URL.createObjectURL(f), Number(rootInput ? rootInput.value : 60) || 60, f.name);
-                    if (status) status.textContent = `Caricato: ${f.name} (root ${sampleRootMidi})`;
-                }
-            });
-        }
-
-        if (rootInput) {
-            rootInput.addEventListener('change', (e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v)) sampleRootMidi = v;
-                if (status && sampleLoadedName) status.textContent = `Caricato: ${sampleLoadedName} (root ${sampleRootMidi})`;
-            });
-        }
-    } catch (e) { /* ignore UI wiring errors */ }
+    // --- Sample UI wiring removed (one-shot loading from PC removed) ---
 });
 
 window.addEventListener('resize', () => {
