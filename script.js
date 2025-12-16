@@ -270,39 +270,71 @@ function ensureToneStarted() {
 async function initMidiAccess() {
     try {
         console.log('Requesting MIDI access...');
-        const midiAccess = await navigator.requestMIDIAccess();
+        // Richiediamo anche sysex: true per massima compatibilità
+        const midiAccess = await navigator.requestMIDIAccess({ sysex: true });
         console.log('MIDI access granted');
         
-        const outputs = midiAccess.outputs.values();
         const selectEl = document.getElementById('midiOutputSelect');
         const toggleBtn = document.getElementById('midiToggleBtn');
         const statusEl = document.getElementById('midiStatus');
-        
-        console.log('MIDI outputs:', midiAccess.outputs);
-        
-        let hasOutputs = false;
-        for (let output of outputs) {
-            hasOutputs = true;
-            console.log('Found MIDI output:', output.name, 'ID:', output.id);
-            const option = document.createElement('option');
-            option.value = output.id;
-            option.textContent = output.name;
-            selectEl.appendChild(option);
-        }
-        
-        if (hasOutputs) {
-            toggleBtn.style.display = 'inline-block';
-            statusEl.textContent = 'MIDI: dispositivi trovati ✓';
-            console.log('MIDI devices found successfully');
-        } else {
-            statusEl.textContent = 'MIDI: nessun dispositivo trovato';
-            console.warn('No MIDI outputs found. Make sure Minilogue XD is connected and turned on.');
-        }
+
+        // Funzione interna per aggiornare la lista (da chiamare all'avvio e ai cambiamenti)
+        const updateMidiList = () => {
+            // Salva la selezione corrente se c'è
+            const currentSelection = selectEl.value;
+            
+            // Pulisci la lista mantenendo l'opzione di default
+            selectEl.innerHTML = '<option value="">-- Nessuno --</option>';
+            
+            const outputs = midiAccess.outputs.values();
+            let hasOutputs = false;
+            let deviceFoundAgain = false;
+
+            for (let output of outputs) {
+                hasOutputs = true;
+                // Filtra per non mostrare porte inutili (opzionale, rimuovi if se vuoi vedere tutto)
+                // if (output.name.includes("CTRL")) continue; 
+
+                const option = document.createElement('option');
+                option.value = output.id;
+                option.textContent = output.name;
+                selectEl.appendChild(option);
+
+                // Se la porta che avevamo selezionato esiste ancora, riselezionala
+                if (output.id === currentSelection) {
+                    option.selected = true;
+                    deviceFoundAgain = true;
+                }
+            }
+
+            if (hasOutputs) {
+                toggleBtn.style.display = 'inline-block';
+                if (!deviceFoundAgain && currentSelection !== "") {
+                     // Il dispositivo selezionato è stato scollegato
+                     statusEl.textContent = 'MIDI: Dispositivo scollegato';
+                     midiOutput = null; // Reset variabile globale
+                }
+            } else {
+                statusEl.textContent = 'MIDI: nessun dispositivo trovato';
+            }
+        };
+
+        // 1. Popola la lista subito
+        updateMidiList();
+
+        // 2. Ascolta i cambiamenti (Hot-plugging)
+        // Se accendi il synth DOPO aver aperto il sito, questo lo rileverà
+        midiAccess.onstatechange = (e) => {
+            console.log("MIDI State Change:", e.port.name, e.port.state);
+            updateMidiList();
+        };
         
         return midiAccess;
+
     } catch (e) {
         console.error('Web MIDI API not supported or access denied:', e);
-        document.getElementById('midiStatus').textContent = 'MIDI: non supportato o accesso negato';
+        const statusEl = document.getElementById('midiStatus');
+        if(statusEl) statusEl.textContent = 'MIDI: Errore o accesso negato';
         return null;
     }
 }
