@@ -218,6 +218,11 @@ const playCooldown = 150; // ms between retriggers of same note
 // Optional sample player for oneshot sample mapping
 let samplePlayer = null;
 let sampleLoadedName = null;
+// Metronome variables
+let metronomeEnabled = false;
+let metronomeOsc = null;
+let metronomePanner = null;
+let metronomeVolume = null;
 const PRESET_SAMPLES = {
   Airhorn: 'suoni/Airhorn.wav',
   figli_delle_stelle: 'suoni/figli_delle_stelle.wav',
@@ -256,8 +261,60 @@ function ensureToneStarted() {
             Tone.start();
             toneStarted = true;
         }
+        // Initialize metronome if not already done
+        if (!metronomeOsc) {
+            initMetronome();
+        }
     } catch (e) {
         console.warn('Tone.js not available or failed to start', e);
+    }
+}
+
+function initMetronome() {
+    try {
+        // Create a short click sound for metronome
+        metronomeVolume = new Tone.Volume(-6).toDestination();
+        metronomePanner = new Tone.Panner(0).connect(metronomeVolume);
+        metronomeOsc = new Tone.MembraneSynth({
+            pitchDecay: 0.008,
+            octaves: 2,
+            envelope: {
+                attack: 0.001,
+                decay: 0.05,
+                sustain: 0,
+                release: 0.05
+            }
+        }).connect(metronomePanner);
+        
+        // Schedule metronome on Transport (plays only if enabled)
+        Tone.Transport.scheduleRepeat((time) => {
+            if (metronomeEnabled) {
+                metronomeOsc.triggerAttackRelease('C4', '16n', time);
+            }
+        }, '4n'); // Every quarter note
+        
+        // Schedule cursor advance on Transport (always runs when playing)
+        transportLoopId = Tone.Transport.scheduleRepeat((time) => {
+            // Schedule the UI update slightly ahead of audio time for visual sync
+            Tone.Draw.schedule(() => {
+                advanceHighlight();
+            }, time);
+        }, '4n'); // Every quarter note, synced with metronome
+        
+        console.log('Metronome and cursor loop initialized on Transport');
+    } catch (e) {
+        console.warn('Failed to initialize metronome', e);
+    }
+}
+
+function updateMetronomeBPM(bpm) {
+    try {
+        if (typeof Tone !== 'undefined' && Tone.Transport) {
+            Tone.Transport.bpm.value = bpm;
+            console.log('Metronome BPM updated to', bpm);
+        }
+    } catch (e) {
+        console.warn('Failed to update metronome BPM', e);
     }
 }
 
@@ -743,9 +800,12 @@ function createChart(canvasId, color, isPreview = false) {
 // Stato globale per l'evidenziazione: dichiarato prima della creazione dei grafici
 let highlightIndex = -1;
 let highlightTimer = null;
-let highlightSpeed = 200; // ms di default
+let highlightSpeed = 750; // ms di default (80 BPM = 750ms)
 let quantizeTimer = null; // timer per aggiornare evidenziazione tastiera
 let highlightIndexTime = -1; // timestamp dell'ultimo highlight
+let transportLoopId = null; // ID del loop schedulato su Transport per il cursore
+let originalPointIndices = []; // Indici interpolati che corrispondono ai punti originali
+let currentOriginalPointIndex = -1; // Indice corrente nell'array originalPointIndices
 
 const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
@@ -1235,6 +1295,24 @@ async function updateCharts() {
         chartDens.data.datasets[0].data = newXs.map((x, i) => ({ x, y: densInterp[i] }));
         chartVel.data.datasets[0].data  = newXs.map((x, i) => ({ x, y: velInterp[i] }));
 
+        // Trova gli indici interpolati più vicini ai punti originali
+        originalPointIndices = [];
+        for (let i = 0; i < xs.length; i++) {
+            const originalX = xs[i];
+            // Trova l'indice interpolato più vicino
+            let closestIdx = 0;
+            let minDist = Math.abs(newXs[0] - originalX);
+            for (let j = 1; j < newXs.length; j++) {
+                const dist = Math.abs(newXs[j] - originalX);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestIdx = j;
+                }
+            }
+            originalPointIndices.push(closestIdx);
+        }
+        console.log('Original point indices mapped:', originalPointIndices.length, 'points');
+
         chartTemp.update("none");
         chartDens.update("none");
         chartVel.update("none");
@@ -1280,64 +1358,94 @@ function updateHighlightRender() {
 let realHighlightIndex = -1;
 
 function advanceHighlight() {
-    const len = chartTemp.data.datasets[0].data.length + xSpacing;
+    const len = chartTemp.data.datasets[0].data.length;
     if (!len) return;
 
-    let next = highlightIndex;
-    for (let i = 0; i < len; i++) {
-        next = (next + 1) % len;
-        if (true || isValidDataAt(chartTemp, next) || isValidDataAt(chartDens, next) || isValidDataAt(chartVel, next)) {
-            highlightIndex = next;
-            realHighlightIndex = next;
-            currIdxTime = indexToTime(chartTemp, highlightIndex);
-            if(currIdxTime !== highlightIndexTime) {
-                highlightIndexTime = currIdxTime;
-                // process the moving marker: detect original points near it and trigger highlights/notes
-                processMovingDotForIndex(highlightIndex);
-            }
-            updateHighlightRender();
-            console.log("realHighlightIndex: ", realHighlightIndex); 
-            return;
-        }
+    // Se abbiamo la mappatura precisa dei punti originali, usala
+    if (originalPointIndices && originalPointIndices.length > 0) {
+        // Avanza all'indice successivo nell'array dei punti originali
+        currentOriginalPointIndex = (currentOriginalPointIndex + 1) % originalPointIndices.length;
+        highlightIndex = originalPointIndices[currentOriginalPointIndex];
+        realHighlightIndex = highlightIndex;
+    } else {
+        // Fallback: usa il metodo approssimato precedente
+        const originalCount = window.originalDataXs ? window.originalDataXs.length : 60;
+        const skipPoints = Math.max(1, Math.round(len / originalCount));
+        let next = highlightIndex + skipPoints;
+        if (next >= len) next = 0;
+        highlightIndex = next;
+        realHighlightIndex = next;
     }
-
-
-    // nessun punto valido trovato
-    highlightIndex = -1;
-    realHighlightIndex = -1;
+    
+    currIdxTime = indexToTime(chartTemp, highlightIndex);
+    
+    if(currIdxTime !== highlightIndexTime) {
+        highlightIndexTime = currIdxTime;
+        // process the moving marker: detect original points near it and trigger highlights/notes
+        processMovingDotForIndex(highlightIndex);
+    }
     updateHighlightRender();
+    console.log("realHighlightIndex:", realHighlightIndex, "currentOriginalPointIndex:", currentOriginalPointIndex); 
 }
 
  
 function startHighlighting(speedMs = 200) {
     highlightSpeed = speedMs;
-    if (highlightTimer !== null) clearInterval(highlightTimer);
-
+    ensureToneStarted();
+    
     // se i dati non sono ancora pronti, aspetta un po' e poi avvia
     if (!chartTemp.data.datasets[0].data.length) {
         realHighlightIndex = -1;
         highlightIndex = -1;
+        // Use a simple timer to wait for data, then start Transport
+        if (highlightTimer !== null) clearInterval(highlightTimer);
         highlightTimer = setInterval(() => {
             if (chartTemp.data.datasets[0].data.length) {
                 clearInterval(highlightTimer);
-                highlightTimer = setInterval(advanceHighlight, highlightSpeed);
+                highlightTimer = 'transport'; // marker that we're using transport
+                if (Tone.Transport.state !== 'started') {
+                    Tone.Transport.start();
+                }
             }
         }, 200);
         return;
     }
 
-    highlightIndex = realHighlightIndex; // iniziare prima del primo
-    highlightTimer = setInterval(advanceHighlight, highlightSpeed);
-    console.log(chartTemp.data.datasets[0]);
-    advanceHighlight(); // mostra subito il primo
+    // Start from -1 so first advance goes to 0 (first point)
+    if (highlightIndex === -1 || realHighlightIndex === -1) {
+        // Imposta a -1 così il primo tick del Transport porterà al primo punto
+        currentOriginalPointIndex = -1;
+        highlightIndex = -1;
+        realHighlightIndex = -1;
+    }
+    
+    // Mark that we're using Transport instead of setInterval
+    highlightTimer = 'transport';
+    
+    // Start Tone.Transport (this will trigger both metronome and cursor)
+    if (Tone.Transport.state !== 'started') {
+        Tone.Transport.start();
+    }
+    
+    console.log('Transport started, BPM:', Tone.Transport.bpm.value, 'Will start from first point');
 }
 
 function stopHighlighting() {
-    if (highlightTimer) { 
+    // Stop Transport if it's running (pauses both metronome and cursor)
+    if (typeof Tone !== 'undefined' && Tone.Transport && Tone.Transport.state === 'started') {
+        Tone.Transport.pause();
+        console.log('Transport paused at position:', Tone.Transport.seconds);
+    }
+    
+    if (highlightTimer && highlightTimer !== 'transport') { 
         clearInterval(highlightTimer);
+    }
+    if (quantizeTimer) {
         clearInterval(quantizeTimer);
-        highlightTimer = null;
-        quantizeTimer = null;}
+        quantizeTimer = null;
+    }
+    highlightTimer = null;
+    
     // clear any auto-quantized highlights
     try {
         const keyboard = document.getElementById('verticalKeyboard');
@@ -1351,10 +1459,14 @@ function stopHighlighting() {
 }
 
 function setHighlightSpeed(ms) {
-    const wasRunning = !!highlightTimer;
-    stopHighlighting();
+    const wasRunning = (highlightTimer !== null);
+    if (wasRunning) {
+        stopHighlighting();
+    }
     highlightSpeed = ms;
-    if (wasRunning) startHighlighting(ms);
+    if (wasRunning) {
+        startHighlighting(ms);
+    }
 }
 
 // Restituisce la chart selezionata dal select vicino alla tastiera
@@ -1518,6 +1630,8 @@ if (speedKnobControl) {
     updateKnobRotation(highlightSpeed);
     const initialBpm = msToBpm(highlightSpeed);
     if (speedValue) speedValue.textContent = `${initialBpm} BPM`;
+    // Initialize metronome BPM
+    updateMetronomeBPM(initialBpm);
 
     speedKnobControl.addEventListener('mousedown', (e) => {
         isDragging = true;
@@ -1550,6 +1664,8 @@ if (speedKnobControl) {
             updateKnobRotation(newSpeed);
             const bpm = msToBpm(newSpeed);
             if (speedValue) speedValue.textContent = `${bpm} BPM`;
+            // Update metronome BPM
+            updateMetronomeBPM(bpm);
         }
     });
 
@@ -1575,6 +1691,54 @@ if (playPauseBtn) {
             playPauseBtn.textContent = 'Play';
             isPlaying = false;
         }
+    });
+}
+
+// Reset button control
+const resetBtn = document.getElementById('resetBtn');
+if (resetBtn) {
+    resetBtn.addEventListener('click', () => {
+        // Stop playback if playing
+        if (isPlaying) {
+            stopHighlighting();
+            playPauseBtn.textContent = 'Play';
+            isPlaying = false;
+        }
+        // Reset cursor to initial position
+        highlightIndex = -1;
+        realHighlightIndex = -1;
+        highlightIndexTime = null;
+        currIdxTime = null;
+        currentOriginalPointIndex = -1;
+        
+        // Reset Transport position to start
+        if (typeof Tone !== 'undefined' && Tone.Transport) {
+            Tone.Transport.stop();
+            Tone.Transport.position = 0;
+            console.log('Transport position reset to 0');
+        }
+        
+        updateHighlightRender();
+        console.log('Cursor reset to initial position');
+    });
+}
+
+// Metronome button control
+const metronomeBtn = document.getElementById('metronomeBtn');
+if (metronomeBtn) {
+    metronomeBtn.addEventListener('click', () => {
+        ensureToneStarted();
+        metronomeEnabled = !metronomeEnabled;
+        
+        if (metronomeEnabled) {
+            metronomeBtn.classList.add('active');
+            console.log('Metronome enabled');
+        } else {
+            metronomeBtn.classList.remove('active');
+            console.log('Metronome disabled');
+        }
+        // Il metronomo si attiva/disattiva solo, non avvia il Transport
+        // Il Transport (e quindi il synth) parte solo con il pulsante Play
     });
 }
 
