@@ -223,11 +223,17 @@ let metronomeEnabled = false;
 let metronomeOsc = null;
 let metronomePanner = null;
 let metronomeVolume = null;
+
+// Recorder variables
+let recorder = null;
+let isRecording = false;
 const PRESET_SAMPLES = {
-  Airhorn: 'suoni/Airhorn.wav',
-  figli_delle_stelle: 'suoni/figli_delle_stelle.wav',
-  fuoco: 'suoni/fuoco.wav',
-  magma: 'suoni/magma.wav'
+  afterglow: 'suoni/afterglow.wav',
+  amber: 'suoni/amber.wav',
+  kelvin: 'suoni/kelvin.wav',
+  lumen: 'suoni/lumen.wav',
+  parsec: 'suoni/parsec.wav',
+  photon: 'suoni/photon.wav'
 };
 
 // MIDI Output variables
@@ -291,7 +297,7 @@ function initMetronome() {
             if (metronomeEnabled) {
                 metronomeOsc.triggerAttackRelease('C4', '16n', time);
             }
-        }, '4n'); // Every quarter note
+        }, '2n'); // Every half measure (full beat)
         
         // Schedule cursor advance on Transport (always runs when playing)
         transportLoopId = Tone.Transport.scheduleRepeat((time) => {
@@ -299,7 +305,7 @@ function initMetronome() {
             Tone.Draw.schedule(() => {
                 advanceHighlight();
             }, time);
-        }, '4n'); // Every quarter note, synced with metronome
+        }, '2n'); // Every half note (half beat), synced with metronome
         
         console.log('Metronome and cursor loop initialized on Transport');
     } catch (e) {
@@ -1739,6 +1745,47 @@ if (metronomeBtn) {
         }
         // Il metronomo si attiva/disattiva solo, non avvia il Transport
         // Il Transport (e quindi il synth) parte solo con il pulsante Play
+    });
+}
+
+// Record button control
+const recordBtn = document.getElementById('recordBtn');
+if (recordBtn) {
+    recordBtn.addEventListener('click', async () => {
+        await ensureToneStarted();
+        
+        if (!isRecording) {
+            // Start recording
+            try {
+                if (!recorder) {
+                    recorder = new Tone.Recorder();
+                    Tone.Destination.connect(recorder);
+                }
+                recorder.start();
+                isRecording = true;
+                recordBtn.classList.add('recording');
+                console.log('Recording started');
+            } catch (e) {
+                console.error('Failed to start recording:', e);
+            }
+        } else {
+            // Stop recording and download
+            try {
+                const recording = await recorder.stop();
+                const url = URL.createObjectURL(recording);
+                const anchor = document.createElement('a');
+                anchor.download = 'sun-synth-recording.wav';
+                anchor.href = url;
+                anchor.click();
+                URL.revokeObjectURL(url);
+                
+                isRecording = false;
+                recordBtn.classList.remove('recording');
+                console.log('Recording stopped and downloaded');
+            } catch (e) {
+                console.error('Failed to stop recording:', e);
+            }
+        }
     });
 }
 

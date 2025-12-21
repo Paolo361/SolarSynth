@@ -495,6 +495,59 @@
 #metronomeBtn.active:hover {
     background: linear-gradient(180deg, #6ee7b7 0%, #34d399 100%);
 }
+
+#recordBtn {
+    background: linear-gradient(180deg, #334155 0%, #1e293b 100%);
+    border: 1px solid #475569;
+    font-family: "Space Mono", monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 0 #0f172a;
+    transition: all 0.1s;
+    width: 44px;
+    height: 44px;
+    text-align: center;
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#recordBtn:hover {
+    background: linear-gradient(180deg, #475569 0%, #334155 100%);
+    border-color: #64748b;
+}
+
+#recordBtn:active {
+    transform: translateY(2px);
+    box-shadow: none;
+}
+
+.record-circle {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #ef4444;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.2s;
+    display: block;
+    flex-shrink: 0;
+}
+
+#recordBtn.recording .record-circle {
+    background: #ef4444;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    animation: recordPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recordPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
 .knob-wrapper {
     position: relative;
 }
