@@ -179,12 +179,23 @@ const dataPointLinesPlugin = {
       }
     });
     
-    // disegna cerchietti sui punti originali
-    ctx.fillStyle = 'rgba(255,193,7,0.7)'; // giallo con trasparenza
-    ctx.strokeStyle = 'rgba(255,193,7,1)'; // giallo opaco
-    ctx.lineWidth = 1.5;
-    const radius = 3.5;
+    // Trova il punto più vicino all'highlightIndex corrente
+    let closestIdx = -1;
+    if (typeof highlightIndex === 'number' && highlightIndex >= 0 && meta.data[highlightIndex]) {
+      const highlightXPx = meta.data[highlightIndex].x;
+      let minDist = Infinity;
+      
+      xs.forEach((xTime, idx) => {
+        const xPx = scale.getPixelForValue(xTime);
+        const dist = Math.abs(xPx - highlightXPx);
+        if (dist < minDist) {
+          minDist = dist;
+          closestIdx = idx;
+        }
+      });
+    }
     
+    // disegna cerchietti sui punti originali
     xs.forEach((xTime, idx) => {
       if (ys && ys[idx] !== undefined) {
         const xPx = scale.getPixelForValue(xTime);
@@ -192,10 +203,39 @@ const dataPointLinesPlugin = {
         
         if (xPx >= chartArea.left && xPx <= chartArea.right &&
             yPx >= chartArea.top && yPx <= chartArea.bottom) {
+          
+          // Se questo è il punto più vicino, evidenzialo in bianco
+          const isClosest = idx === closestIdx;
+          const radius = isClosest ? 7 : 3.5;
+          const fillAlpha = isClosest ? 1 : 0.7;
+          const strokeAlpha = isClosest ? 1 : 1;
+          
+          if (isClosest) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)'; // Bianco
+            ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
+            ctx.lineWidth = 3;
+          } else {
+            ctx.fillStyle = `rgba(255,193,7,${fillAlpha})`; // Giallo
+            ctx.strokeStyle = `rgba(255,193,7,${strokeAlpha})`;
+            ctx.lineWidth = 1.5;
+          }
+          
+          // Aggiungi glow se è il closest
+          if (isClosest) {
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+            ctx.shadowBlur = 15;
+          }
+          
           ctx.beginPath();
           ctx.arc(xPx, yPx, radius, 0, 2 * Math.PI);
           ctx.fill();
           ctx.stroke();
+          
+          // Reset shadow
+          if (isClosest) {
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+          }
         }
       }
     });
@@ -208,6 +248,12 @@ Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, d
 
 // --- Tone.js synth setup ---
 let toneSynth = null;
+let fftAnalyser = null;
+let spectrumCanvas = null;
+let spectrumCtx = null;
+let spectrumAnimationId = null;
+let spectrumBands = []; // Array per smooth decay
+let audioFilter = null; // Filtro audio
 let mainLimiter = null;
 let mainCompressor = null;
 let masterVolume = null;
@@ -280,6 +326,14 @@ function ensureToneStarted() {
             startDbMeterLoop();
         }
         if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterVolume);
+        
+        // Initialize FFT Analyser
+        if (!fftAnalyser && masterVolume) {
+            fftAnalyser = new Tone.FFT(512);
+            masterVolume.connect(fftAnalyser);
+            initSpectrum();
+        }
+        
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             // Tone.start() must be called in a user gesture; try to start silently if possible
             Tone.start();
@@ -329,6 +383,320 @@ function startDbMeterLoop() {
         meterAnimationId = requestAnimationFrame(loop);
     };
     meterAnimationId = requestAnimationFrame(loop);
+}
+
+// ========== FFT Spectrum Visualizer (Equalizer Style) ==========
+function initSpectrum() {
+    spectrumCanvas = document.getElementById('spectrumCanvas');
+    if (!spectrumCanvas) return;
+    spectrumCtx = spectrumCanvas.getContext('2d');
+    
+    // Inizializza le bande con valori zero
+    const numBands = 32; // Numero di bande dell'equalizzatore
+    spectrumBands = new Array(numBands).fill(0);
+    
+    // Inizializza i controlli del filtro
+    initFilterControls();
+    
+    startSpectrumLoop();
+}
+
+// ========== Filter Controls ==========
+let currentFilterType = 'off';
+let currentFilterFreq = 1000;
+
+function initFilterControls() {
+    // Pulsanti tipo filtro
+    const filterButtons = document.querySelectorAll('.filter-type-btn');
+    filterButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            filterButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            const type = btn.getAttribute('data-type');
+            currentFilterType = type;
+            
+            if (type === 'off') {
+                if (audioFilter) {
+                    // Ricollega il reverb direttamente al masterVolume
+                    if (reverb) {
+                        reverb.disconnect();
+                        reverb.connect(masterVolume);
+                    }
+                    audioFilter.disconnect();
+                    audioFilter.dispose();
+                    audioFilter = null;
+                }
+            } else {
+                if (!audioFilter) {
+                    // Crea il filtro e inseriscilo tra reverb e masterVolume
+                    audioFilter = new Tone.Filter({
+                        type: type,
+                        frequency: parseFloat(document.getElementById('filterFreq').value),
+                        Q: 1
+                    });
+                    
+                    // Inserisci il filtro nella catena: reverb -> filter -> masterVolume
+                    if (reverb) {
+                        reverb.disconnect();
+                        reverb.connect(audioFilter);
+                    }
+                    audioFilter.connect(masterVolume);
+                } else {
+                    audioFilter.type = type;
+                }
+            }
+        });
+    });
+    
+    // Set OFF as default
+    filterButtons[0].classList.add('active');
+    
+    // Input numerico frequenza - aggiorna solo quando si conferma
+    const freqInput = document.getElementById('filterFreq');
+    
+    // Funzione per applicare la frequenza
+    const applyFrequency = () => {
+        let freq = parseFloat(freqInput.value);
+        if (isNaN(freq) || freq < 20) {
+            freq = 20;
+        } else if (freq > 20000) {
+            freq = 20000;
+        }
+        freqInput.value = Math.round(freq);
+        currentFilterFreq = freq;
+        if (audioFilter) audioFilter.frequency.value = freq;
+    };
+    
+    // Applica quando si perde il focus
+    freqInput.addEventListener('blur', applyFrequency);
+    
+    // Applica quando si preme Enter
+    freqInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            applyFrequency();
+            freqInput.blur(); // Rimuovi il focus
+        }
+    });
+}
+
+function startSpectrumLoop() {
+    if (spectrumAnimationId) return; // already running
+    
+    // Definisci le bande di frequenza (Hz) in scala logaritmica
+    const frequencyBands = [
+        20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
+        500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000,
+        5000, 6300, 8000, 10000, 12500, 16000, 20000
+    ];
+    
+    const loop = () => {
+        if (!spectrumCtx || !spectrumCanvas || !fftAnalyser) {
+            spectrumAnimationId = null;
+            return;
+        }
+        
+        const values = fftAnalyser.getValue();
+        const width = spectrumCanvas.width;
+        const height = spectrumCanvas.height;
+        const sampleRate = 44100; // Assuming standard sample rate
+        const nyquist = sampleRate / 2;
+        
+        // Clear canvas con sfondo scuro
+        spectrumCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        spectrumCtx.fillRect(0, 0, width, height);
+        
+        // Calcola larghezza barra e gap
+        const numBands = spectrumBands.length;
+        const totalGap = numBands - 1;
+        const gapWidth = 2;
+        const barWidth = (width - totalGap * gapWidth) / numBands;
+        
+        // Raggruppa i bin FFT in bande logaritmiche e calcola i valori
+        for (let i = 0; i < numBands; i++) {
+            const freqStart = i === 0 ? 20 : frequencyBands[i - 1];
+            const freqEnd = i < frequencyBands.length ? frequencyBands[i] : nyquist;
+            
+            // Trova i bin corrispondenti a questa banda
+            const binStart = Math.floor((freqStart / nyquist) * values.length);
+            const binEnd = Math.ceil((freqEnd / nyquist) * values.length);
+            
+            // Calcola il valore medio (in dB) per questa banda
+            let sum = 0;
+            let count = 0;
+            for (let j = binStart; j < binEnd && j < values.length; j++) {
+                sum += values[j];
+                count++;
+            }
+            const avgDb = count > 0 ? sum / count : -100;
+            
+            // Normalizza da dB (-100 a 0) a range 0-1
+            const normalizedValue = Math.max(0, Math.min(1, (avgDb + 100) / 100));
+            
+            // Smooth decay: interpola verso il nuovo valore
+            const smoothFactor = 0.3; // Più basso = più fluido
+            spectrumBands[i] = spectrumBands[i] * (1 - smoothFactor) + normalizedValue * smoothFactor;
+            
+            // Applica decay se il segnale diminuisce
+            if (normalizedValue < spectrumBands[i]) {
+                spectrumBands[i] *= 0.85; // Decay rate
+            }
+        }
+        
+        // Disegna area riempita (filled)
+        const gradient = spectrumCtx.createLinearGradient(0, height, 0, 0);
+        gradient.addColorStop(0, '#34d399');
+        gradient.addColorStop(0.5, '#fbbf24');
+        gradient.addColorStop(1, '#ef4444');
+        
+        spectrumCtx.fillStyle = gradient;
+        spectrumCtx.beginPath();
+        spectrumCtx.moveTo(0, height);
+        
+        // Disegna il contorno superiore dell'area
+        for (let i = 0; i < numBands; i++) {
+            const barHeight = spectrumBands[i] * height;
+            const x = i * (barWidth + gapWidth) + barWidth / 2;
+            const y = height - barHeight;
+            
+            if (i === 0) {
+                spectrumCtx.lineTo(x, y);
+            } else {
+                // Interpolazione smooth tra i punti
+                const prevX = (i - 1) * (barWidth + gapWidth) + barWidth / 2;
+                const prevY = height - spectrumBands[i - 1] * height;
+                const cpX1 = prevX + (x - prevX) / 2;
+                const cpX2 = prevX + (x - prevX) / 2;
+                spectrumCtx.bezierCurveTo(cpX1, prevY, cpX2, y, x, y);
+            }
+        }
+        
+        // Chiudi il percorso
+        spectrumCtx.lineTo(width, height);
+        spectrumCtx.closePath();
+        spectrumCtx.fill();
+        
+        // Aggiungi linea di contorno
+        spectrumCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        spectrumCtx.lineWidth = 2;
+        spectrumCtx.beginPath();
+        spectrumCtx.moveTo(0, height);
+        for (let i = 0; i < numBands; i++) {
+            const barHeight = spectrumBands[i] * height;
+            const x = i * (barWidth + gapWidth) + barWidth / 2;
+            const y = height - barHeight;
+            if (i === 0) {
+                spectrumCtx.lineTo(x, y);
+            } else {
+                const prevX = (i - 1) * (barWidth + gapWidth) + barWidth / 2;
+                const prevY = height - spectrumBands[i - 1] * height;
+                const cpX1 = prevX + (x - prevX) / 2;
+                const cpX2 = prevX + (x - prevX) / 2;
+                spectrumCtx.bezierCurveTo(cpX1, prevY, cpX2, y, x, y);
+            }
+        }
+        spectrumCtx.stroke();
+        
+        // Disegna griglia di riferimento
+        spectrumCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        spectrumCtx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) {
+            const y = (height / 4) * i;
+            spectrumCtx.beginPath();
+            spectrumCtx.moveTo(0, y);
+            spectrumCtx.lineTo(width, y);
+            spectrumCtx.stroke();
+        }
+        
+        // Disegna la curva del filtro se attivo
+        if (currentFilterType !== 'off') {
+            spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
+            spectrumCtx.lineWidth = 2;
+            spectrumCtx.beginPath();
+            
+            for (let i = 0; i < numBands; i++) {
+                const freq = frequencyBands[i];
+                const x = i * (barWidth + gapWidth) + barWidth / 2;
+                
+                // Calcola la risposta del filtro in base al tipo
+                let response = 0;
+                const ratio = freq / currentFilterFreq;
+                
+                if (currentFilterType === 'lowpass') {
+                    // Slope -12dB/octave approssimato
+                    if (freq < currentFilterFreq) {
+                        response = 1;
+                    } else {
+                        response = Math.max(0, 1 - Math.log2(ratio) * 0.5);
+                    }
+                } else if (currentFilterType === 'highpass') {
+                    // Slope -12dB/octave approssimato
+                    if (freq > currentFilterFreq) {
+                        response = 1;
+                    } else {
+                        response = Math.max(0, 1 - Math.log2(1/ratio) * 0.5);
+                    }
+                } else if (currentFilterType === 'bandpass') {
+                    // Banda passante centrata sulla cutoff
+                    const distance = Math.abs(Math.log2(ratio));
+                    response = Math.max(0, 1 - distance * 0.8);
+                }
+                
+                const y = height - (response * height * 0.9);
+                
+                if (i === 0) {
+                    spectrumCtx.moveTo(x, y);
+                } else {
+                    spectrumCtx.lineTo(x, y);
+                }
+            }
+            
+            spectrumCtx.stroke();
+            
+            // Disegna linea verticale alla frequenza di cutoff
+            const cutoffBandIndex = frequencyBands.findIndex(f => f >= currentFilterFreq);
+            if (cutoffBandIndex !== -1) {
+                const cutoffX = cutoffBandIndex * (barWidth + gapWidth) + barWidth / 2;
+                spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+                spectrumCtx.lineWidth = 1;
+                spectrumCtx.setLineDash([4, 4]);
+                spectrumCtx.beginPath();
+                spectrumCtx.moveTo(cutoffX, 0);
+                spectrumCtx.lineTo(cutoffX, height);
+                spectrumCtx.stroke();
+                spectrumCtx.setLineDash([]);
+            }
+        }
+        
+        // Disegna etichette di frequenza sull'asse X
+        spectrumCtx.font = '8px "Space Mono", monospace';
+        spectrumCtx.fillStyle = '#e2e8f0';
+        spectrumCtx.textAlign = 'center';
+        
+        // Etichette da mostrare (indici selezionati delle frequencyBands)
+        const labelIndices = [0, 7, 13, 18, 23, 28, 30]; // 20Hz, 100Hz, 400Hz, 1kHz, 4kHz, 12.5kHz, 20kHz
+        
+        labelIndices.forEach(index => {
+            if (index < numBands) {
+                const freq = frequencyBands[index];
+                const x = index * (barWidth + gapWidth) + barWidth / 2;
+                
+                // Formatta la frequenza (Hz o kHz)
+                let label;
+                if (freq >= 1000) {
+                    label = (freq / 1000).toFixed(freq >= 10000 ? 0 : 1) + 'k';
+                } else {
+                    label = Math.round(freq).toString();
+                }
+                
+                spectrumCtx.fillText(label, x, height - 2);
+            }
+        });
+        
+        spectrumAnimationId = requestAnimationFrame(loop);
+    };
+    
+    spectrumAnimationId = requestAnimationFrame(loop);
 }
 
 function attachVolumeSlider() {
@@ -869,10 +1237,10 @@ function createChart(canvasId, color, isPreview = false) {
                     return g;
                 },
                 // pointRadius is scriptable so we can highlight the current index
-                pointRadius: (ctx) => (typeof highlightIndex === 'number' && ctx.dataIndex === highlightIndex ? 4 : 0),
-                pointBackgroundColor: (ctx) => (typeof highlightIndex === 'number' && ctx.dataIndex === highlightIndex ? (COLOR_MAP[color] || color) : 'rgba(0,0,0,0)'),
-                pointBorderColor: (ctx) => (typeof highlightIndex === 'number' && ctx.dataIndex === highlightIndex ? (COLOR_MAP[color] || color) : 'rgba(0,0,0,0)'),
-                hoverRadius: 6
+                pointRadius: 0, // Nascosto - usiamo solo i pallini originali
+                pointBackgroundColor: 'rgba(0,0,0,0)',
+                pointBorderColor: 'rgba(0,0,0,0)',
+                hoverRadius: 0
             }]  
         },
         options: {
@@ -1062,11 +1430,18 @@ function processMovingDotForIndex(idx) {
         const keyboard = document.getElementById('verticalKeyboard');
         if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
 
-        // compute min/max for mapping Y->MIDI
-        const numericYs = ys.filter(v => Number.isFinite(v));
-        const hasNumeric = numericYs.length > 0;
-        const minY = hasNumeric ? Math.min(...numericYs) : 0;
-        const maxY = hasNumeric ? Math.max(...numericYs) : minY + 1;
+        // Usa i limiti dell'asse Y del grafico invece dei dati grezzi
+        let minY, maxY;
+        if (chartPreview && chartPreview.scales && chartPreview.scales.y) {
+            minY = chartPreview.scales.y.min;
+            maxY = chartPreview.scales.y.max;
+        } else {
+            // Fallback ai dati grezzi se il grafico non è disponibile
+            const numericYs = ys.filter(v => Number.isFinite(v));
+            const hasNumeric = numericYs.length > 0;
+            minY = hasNumeric ? Math.min(...numericYs) : 0;
+            maxY = hasNumeric ? Math.max(...numericYs) : minY + 1;
+        }
 
         // compute average original spacing to set a robust threshold
         let avgOrigSpacing = null;
