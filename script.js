@@ -218,6 +218,14 @@ const playCooldown = 150; // ms between retriggers of same note
 // Optional sample player for oneshot sample mapping
 let samplePlayer = null;
 let sampleLoadedName = null;
+const MAX_POLYPHONY = 8;
+const activeSampleVoices = [];
+let outputMeter = null;
+let meterAnimationId = null;
+const VOLUME_MIN = -40;
+const VOLUME_MAX = 6;
+let currentVolumeDb = 0;
+const SNAP_THRESHOLD = 0.3;
 // Metronome variables
 let metronomeEnabled = false;
 let metronomeOsc = null;
@@ -227,13 +235,18 @@ let metronomeVolume = null;
 // Recorder variables
 let recorder = null;
 let isRecording = false;
+
+// Filter variables
+// Filters temporarily disabled
+
 const PRESET_SAMPLES = {
-  afterglow: 'suoni/afterglow.wav',
-  amber: 'suoni/amber.wav',
-  kelvin: 'suoni/kelvin.wav',
-  lumen: 'suoni/lumen.wav',
-  parsec: 'suoni/parsec.wav',
-  photon: 'suoni/photon.wav'
+    afterglow: 'suoni/afterglow.wav',
+    ember: 'suoni/ember.wav',
+    kelvin: 'suoni/kelvin.wav',
+    lumen: 'suoni/lumen.wav',
+    parsec: 'suoni/parsec.wav',
+    photon: 'suoni/photon.wav',
+    halo: 'suoni/halo.wav'
 };
 
 // MIDI Output variables
@@ -261,6 +274,11 @@ function ensureToneStarted() {
             }).connect(mainLimiter);
             masterVolume = new Tone.Volume(0).connect(mainCompressor);
         }
+        if (!outputMeter && masterVolume) {
+            outputMeter = new Tone.Meter({ normalRange: false });
+            masterVolume.connect(outputMeter);
+            startDbMeterLoop();
+        }
         if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterVolume);
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             // Tone.start() must be called in a user gesture; try to start silently if possible
@@ -274,6 +292,108 @@ function ensureToneStarted() {
     } catch (e) {
         console.warn('Tone.js not available or failed to start', e);
     }
+}
+
+function setMasterVolume(volumeDb) {
+    ensureToneStarted();
+    const clamped = Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, volumeDb));
+    currentVolumeDb = clamped;
+    if (masterVolume) masterVolume.volume.value = clamped;
+}
+
+function updateDbReadout(volumeDb) {
+    const readout = document.getElementById('dbReadout');
+    if (!readout) return;
+    const val = volumeDb === 0 ? '0' : volumeDb.toFixed(1);
+    readout.textContent = `${val} dB`;
+}
+
+function startDbMeterLoop() {
+    if (meterAnimationId) return; // already running
+    const loop = () => {
+        const fill = document.getElementById('dbMeterFill');
+        if (!fill || !outputMeter) {
+            meterAnimationId = null;
+            return;
+        }
+        let level = outputMeter.getLevel();
+        if (!Number.isFinite(level)) level = -60;
+        const colorLevel = level;
+        const clamped = Math.max(-60, Math.min(0, level));
+        const pct = Math.max(0, Math.min(1, (clamped + 60) / 60));
+        fill.style.width = `${pct * 100}%`;
+        let color = '#22c55e';
+        if (colorLevel > -3 && colorLevel <= 0) color = '#fbbf24';
+        else if (colorLevel > 0) color = '#ef4444';
+        fill.style.background = color;
+        meterAnimationId = requestAnimationFrame(loop);
+    };
+    meterAnimationId = requestAnimationFrame(loop);
+}
+
+function attachVolumeSlider() {
+    const thumb = document.getElementById('volumeThumb');
+    const slider = document.querySelector('.volume-slider');
+    if (!thumb || !slider) return;
+
+    const updateThumb = (volumeDb) => {
+        const t = (volumeDb - VOLUME_MIN) / (VOLUME_MAX - VOLUME_MIN);
+        const pct = Math.max(0, Math.min(1, t));
+        thumb.style.left = `${pct * 100}%`;
+        thumb.setAttribute('aria-valuenow', volumeDb.toFixed(1));
+    };
+
+    const applyVolumeFromEvent = (evt) => {
+        const rect = slider.getBoundingClientRect();
+        const x = Math.min(Math.max(evt.clientX - rect.left, 0), rect.width);
+        const t = rect.width > 0 ? x / rect.width : 0;
+        const volumeDb = VOLUME_MIN + t * (VOLUME_MAX - VOLUME_MIN);
+        let rounded = Math.round(volumeDb * 10) / 10;
+        if (Math.abs(rounded) < SNAP_THRESHOLD) rounded = 0;
+        setMasterVolume(rounded);
+        updateThumb(rounded);
+        updateDbReadout(rounded);
+    };
+
+    updateThumb(currentVolumeDb);
+    setMasterVolume(currentVolumeDb);
+    updateDbReadout(currentVolumeDb);
+
+    let dragging = false;
+
+    // Double-click to reset to 0 dB
+    const resetToZero = (evt) => {
+        setMasterVolume(0);
+        updateThumb(0);
+        updateDbReadout(0);
+        evt.preventDefault();
+    };
+
+    thumb.addEventListener('dblclick', resetToZero);
+    slider.addEventListener('dblclick', resetToZero);
+
+    const startDrag = (evt) => {
+        dragging = true;
+        document.body.style.cursor = 'ew-resize';
+        applyVolumeFromEvent(evt);
+        evt.preventDefault();
+    };
+
+    const moveDrag = (evt) => {
+        if (!dragging) return;
+        applyVolumeFromEvent(evt);
+    };
+
+    const endDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = 'default';
+    };
+
+    slider.addEventListener('mousedown', startDrag);
+    thumb.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', moveDrag);
+    document.addEventListener('mouseup', endDrag);
 }
 
 function initMetronome() {
@@ -373,11 +493,11 @@ async function initMidiAccess() {
                 toggleBtn.style.display = 'inline-block';
                 if (!deviceFoundAgain && currentSelection !== "") {
                      // Il dispositivo selezionato è stato scollegato
-                     statusEl.textContent = 'MIDI: Dispositivo scollegato';
+                     if (statusEl) statusEl.textContent = 'MIDI: Dispositivo scollegato';
                      midiOutput = null; // Reset variabile globale
                 }
             } else {
-                statusEl.textContent = 'MIDI: nessun dispositivo trovato';
+                if (statusEl) statusEl.textContent = 'MIDI: nessun dispositivo trovato';
             }
         };
 
@@ -550,6 +670,25 @@ function pickSampleFile(rootMidi = 60, fileInputEl = null) {
 }
 
 // Play loaded sample transposed to the requested MIDI note (oneshot) using playbackRate
+function pruneSampleVoices() {
+    while (activeSampleVoices.length >= MAX_POLYPHONY) {
+        const old = activeSampleVoices.shift();
+        try { old.stop(); } catch (e) {}
+        try { old.dispose(); } catch (e) {}
+    }
+}
+
+function trackSampleVoice(player) {
+    if (!player) return () => {};
+    const cleanup = () => {
+        const idx = activeSampleVoices.indexOf(player);
+        if (idx !== -1) activeSampleVoices.splice(idx, 1);
+    };
+    player.onstop = cleanup;
+    activeSampleVoices.push(player);
+    return cleanup;
+}
+
 function playSampleAtMidi(midi) {
     try {
         if (!samplePlayer || !samplePlayer.buffer) {
@@ -564,8 +703,11 @@ function playSampleAtMidi(midi) {
         // Ensure audio context is started
         ensureToneStarted();
 
+        pruneSampleVoices();
+
         // Clone player from buffer to allow overlapping oneshots
         const temp = new Tone.Player(samplePlayer.buffer);
+        const cleanup = trackSampleVoice(temp);
         
         // Route through effects chain if initialized
         if (effectsChain) {
@@ -588,7 +730,9 @@ function playSampleAtMidi(midi) {
 
         // dispose after a short timeout (safe margin based on original duration)
         setTimeout(() => {
-            try { temp.stop(); temp.dispose(); } catch (e) {}
+            try { temp.stop(); } catch (e) {}
+            try { temp.dispose(); } catch (e) {}
+            cleanup();
         }, (samplePlayer.buffer.duration / playbackRate + 0.5) * 1000);
 
         return true;
@@ -816,6 +960,7 @@ let currentOriginalPointIndex = -1; // Indice corrente nell'array originalPointI
 const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
 const chartVel  = createChart("chartVel",  "green");
+let selectedChartSource = 'Temp';
 
 // Preview chart (mostrato a destra della keyboard-box)
 let chartPreview = null;
@@ -833,7 +978,22 @@ function ensurePreviewChart() {
     attachPreviewMouseTracking();
 }
 
-function updatePreview(param) {
+function updateChartSelectionUI() {
+    const boxes = document.querySelectorAll('.chart-box');
+    boxes.forEach(box => {
+        const src = box.getAttribute('data-chart-source');
+        if (src === selectedChartSource) box.classList.add('chart-selected');
+        else box.classList.remove('chart-selected');
+    });
+}
+
+function setSelectedChart(source) {
+    selectedChartSource = source || 'Temp';
+    updateChartSelectionUI();
+    updatePreview(selectedChartSource);
+}
+
+function updatePreview(param = selectedChartSource) {
     ensurePreviewChart();
     if (!chartPreview) return;
     let src = chartVel;
@@ -996,17 +1156,380 @@ function getKeyIndexFromValue(value, maxValue, minValue) {
 
 // Wire select change
 document.addEventListener('DOMContentLoaded', () => {
-    const radios = document.querySelectorAll('input[name="chartSource"]');
-    radios.forEach(r => {
-        r.addEventListener('change', (e) => updatePreview(e.target.value));
+    const chartBoxes = document.querySelectorAll('.chart-box');
+    chartBoxes.forEach(box => {
+        box.addEventListener('click', () => {
+            const src = box.getAttribute('data-chart-source');
+            if (src) setSelectedChart(src);
+        });
     });
-    
-    // initialize preview with current selection (default Temp)
-    const current = document.querySelector('input[name="chartSource"]:checked');
-    if (current) updatePreview(current.value);
+
+    // initialize preview and selection (default Temp)
+    setSelectedChart(selectedChartSource);
     
     // ensure preview height matches keyboard
     syncPreviewHeight();
+    setupPreviewKeyboardSync();
+
+    // ============================================================
+    // DRAG AND DROP SYSTEM FOR CHARTS TO KNOBS
+    // ============================================================
+    
+    // Oggetto per tracciare le assegnazioni knob -> grafico
+    const knobAssignments = {};
+    window.knobAssignments = knobAssignments; // Esponi globalmente
+    let draggedChart = null;
+
+    // Funzione per aggiornare la corona colorata della knob
+    function updateKnobVisual(knobElement, chartSource) {
+        // Trova il parent effect-param
+        const effectParam = knobElement.closest('.effect-param');
+        if (!effectParam) return;
+        
+        // Rimuovi tutte le classi di assegnazione precedenti
+        effectParam.classList.remove('assigned-temp', 'assigned-dens', 'assigned-vel');
+        
+        // Aggiungi la classe appropriata in base al grafico
+        if (chartSource === 'Temp') {
+            effectParam.classList.add('assigned-temp');
+        } else if (chartSource === 'Dens') {
+            effectParam.classList.add('assigned-dens');
+        } else if (chartSource === 'Vel') {
+            effectParam.classList.add('assigned-vel');
+        }
+    }
+
+    // Funzione per ottenere il valore normalizzato (0-100%) di un grafico a un indice specifico
+    function getNormalizedChartValue(chartSource, index) {
+        let chart;
+        if (chartSource === 'Temp') {
+            chart = chartTemp;
+        } else if (chartSource === 'Dens') {
+            chart = chartDens;
+        } else if (chartSource === 'Vel') {
+            chart = chartVel;
+        } else {
+            return null;
+        }
+
+        const data = chart.data.datasets[0].data;
+        if (!data || data.length === 0 || index < 0 || index >= data.length) {
+            return null;
+        }
+
+        // Trova min e max dell'intero dataset per normalizzare
+        const values = data.map(d => d.y).filter(v => Number.isFinite(v));
+        if (values.length === 0) return null;
+        
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        
+        // Ottieni il valore corrente all'indice
+        const currentValue = data[index].y;
+        if (!Number.isFinite(currentValue)) return null;
+        
+        // Normalizza tra 0 e 100%
+        if (max === min) return 50; // Se tutti i valori sono uguali, ritorna 50%
+        return ((currentValue - min) / (max - min)) * 100;
+    }
+
+    // Funzione per aggiornare il valore di una knob in base al grafico assegnato e all'indice corrente
+    function updateKnobFromChart(knobId, chartSource, index) {
+        if (typeof index === 'undefined' || index === null) index = highlightIndex;
+        if (index < 0) return;
+
+        const normalizedValue = getNormalizedChartValue(chartSource, index);
+        if (normalizedValue === null) return;
+
+        const knobElement = document.getElementById(knobId);
+        if (!knobElement) return;
+
+        // Mappa globale per tenere traccia dell'angolo corrente delle knob (evita salti)
+        window.knobAngles = window.knobAngles || {};
+        const minAngle = -135;
+        const maxAngle = 135;
+        const targetAngle = minAngle + (normalizedValue / 100) * (maxAngle - minAngle);
+
+        // Se non presente, inizializza l'angolo corrente vicino al target per evitare "salti"
+        if (typeof window.knobAngles[knobId] !== 'number') {
+            // prova a leggere dal transform inline, altrimenti usa target
+            const m = (knobElement.style.transform || '').match(/-?\d+\.?\d*/);
+            window.knobAngles[knobId] = m ? parseFloat(m[0]) : targetAngle;
+        }
+
+        animateKnobRotation(knobId, knobElement, targetAngle, 150);
+        animateEffectParameter(knobId, normalizedValue, 150);
+    }
+
+    // Anima la rotazione della knob con easing morbido
+    function animateKnobRotation(knobId, knobElement, targetAngle, duration = 150) {
+        const startAngle = window.knobAngles && typeof window.knobAngles[knobId] === 'number'
+            ? window.knobAngles[knobId]
+            : targetAngle;
+        const startTime = performance.now();
+
+        const step = (now) => {
+            const t = Math.min(1, (now - startTime) / duration);
+            // easing: easeInOutCubic
+            const p = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            const current = startAngle + (targetAngle - startAngle) * p;
+            knobElement.style.transform = `rotate(${current}deg)`;
+            window.knobAngles[knobId] = current;
+            if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    // Anima il parametro dell'effetto per evitare step bruschi
+    function animateEffectParameter(knobId, targetValue, duration = 150) {
+        window.effectParamValues = window.effectParamValues || {};
+        const startValue = (typeof window.effectParamValues[knobId] === 'number')
+            ? window.effectParamValues[knobId]
+            : targetValue;
+        const startTime = performance.now();
+
+        const tick = (now) => {
+            const t = Math.min(1, (now - startTime) / duration);
+            const p = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            const current = startValue + (targetValue - startValue) * p;
+            window.effectParamValues[knobId] = current;
+            updateEffectParameter(knobId, current);
+            if (t < 1) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    }
+
+    // Funzione per aggiornare i parametri degli effetti
+    function updateEffectParameter(knobId, value) {
+        // Mappa dei knobId ai parametri degli effetti
+        const paramMap = {
+            'distortionDriveKnob': () => distortion.distortion = value / 100,
+            'distortionWetKnob': () => distortion.wet.value = value / 100,
+            'chorusFrequencyKnob': () => chorus.frequency.value = (value / 100) * 10,
+            'chorusDelayTimeKnob': () => chorus.delayTime = (value / 100) * 20,
+            'chorusDepthKnob': () => chorus.depth = value / 100,
+            'delayDelayTimeKnob': () => delay.delayTime.value = (value / 100) * 2,
+            'delayFeedbackKnob': () => delay.feedback.value = value / 100,
+            'delayWetKnob': () => delay.wet.value = value / 100,
+            'reverbDecayKnob': () => reverb.decay = (value / 100) * 10,
+            'reverbWetKnob': () => reverb.wet.value = value / 100,
+        };
+
+        if (paramMap[knobId]) {
+            paramMap[knobId]();
+        }
+    }
+
+    // Setup drag events sui chart-box
+    chartBoxes.forEach(box => {
+        box.addEventListener('dragstart', (e) => {
+            draggedChart = box.getAttribute('data-chart-source');
+            box.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', draggedChart);
+            
+            // Illumina tutte le knob non assegnate a questo grafico
+            const allKnobs = document.querySelectorAll('.effect-knob, .knob');
+            allKnobs.forEach(knob => {
+                const knobId = knob.id;
+                if (!knobAssignments[knobId] || knobAssignments[knobId] !== draggedChart) {
+                    knob.classList.add('glow-available');
+                } else {
+                    knob.classList.add('glow-assigned');
+                }
+            });
+        });
+
+        box.addEventListener('dragend', (e) => {
+            box.classList.remove('dragging');
+            draggedChart = null;
+            
+            // Rimuovi glow da tutte le knob
+            const allKnobs = document.querySelectorAll('.effect-knob, .knob');
+            allKnobs.forEach(knob => {
+                knob.classList.remove('glow-available');
+                knob.classList.remove('glow-assigned');
+            });
+        });
+    });
+
+    // Setup drop zone su tutte le knobs
+    const allKnobs = document.querySelectorAll('.effect-knob, .knob');
+    allKnobs.forEach(knob => {
+        knob.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            knob.classList.add('drag-over');
+        });
+
+        knob.addEventListener('dragleave', (e) => {
+            knob.classList.remove('drag-over');
+        });
+
+        knob.addEventListener('drop', (e) => {
+            e.preventDefault();
+            knob.classList.remove('drag-over');
+            knob.classList.remove('glow-available');
+            knob.classList.remove('glow-assigned');
+            
+            const chartSource = e.dataTransfer.getData('text/plain');
+            const knobId = knob.id;
+            
+            if (chartSource && knobId) {
+                // Salva l'assegnazione
+                knobAssignments[knobId] = chartSource;
+                
+                // Aggiorna la visualizzazione della knob
+                updateKnobVisual(knob, chartSource);
+                
+                // Aggiorna il valore della knob
+                updateKnobFromChart(knobId, chartSource);
+                
+                console.log(`Grafico ${chartSource} assegnato a knob ${knobId}`);
+            }
+        });
+    });
+
+    // Funzione per aggiornare tutte le knob assegnate quando i dati cambiano o l'indice avanza
+    function updateAllAssignedKnobs(index) {
+        // Se non è specificato un indice, usa highlightIndex globale
+        if (typeof index === 'undefined' || index === null) {
+            index = highlightIndex;
+        }
+        
+        Object.keys(knobAssignments).forEach(knobId => {
+            const chartSource = knobAssignments[knobId];
+            updateKnobFromChart(knobId, chartSource, index);
+        });
+    }
+
+    // Aggiungi l'aggiornamento al ciclo di fetch dei dati
+    // Questa funzione verrà chiamata ogni volta che i dati vengono aggiornati
+    window.updateAllAssignedKnobs = updateAllAssignedKnobs;
+
+    // ============================================================
+    // MODE SWITCH: PRESETS vs MIDI (mutually exclusive)
+    // ============================================================
+    const modePresetsBtn = document.getElementById('modePresetsBtn');
+    const modeMidiBtn = document.getElementById('modeMidiBtn');
+    const modePresetsPanel = document.getElementById('modePresetsPanel');
+    const modeMidiPanel = document.getElementById('modeMidiPanel');
+
+    function setMode(mode) {
+        const isPresets = mode === 'presets';
+
+        // Toggle button active state
+        modePresetsBtn.classList.toggle('active', isPresets);
+        modePresetsBtn.setAttribute('aria-selected', String(isPresets));
+        modeMidiBtn.classList.toggle('active', !isPresets);
+        modeMidiBtn.setAttribute('aria-selected', String(!isPresets));
+
+        // Show/hide panels
+        modePresetsPanel.style.display = isPresets ? 'block' : 'none';
+        modeMidiPanel.style.display = isPresets ? 'none' : 'block';
+
+        // Mutual exclusivity: deactivate the other function
+        try {
+            if (isPresets) {
+                // Disable MIDI
+                if (typeof midiEnabled !== 'undefined') midiEnabled = false;
+                const statusEl = document.getElementById('midiStatus');
+                if (statusEl) statusEl.textContent = 'MIDI: inattivo';
+            } else {
+                // Disable Sample Presets
+                if (typeof samplePlayer !== 'undefined') samplePlayer = null;
+                if (typeof sampleLoadedName !== 'undefined') sampleLoadedName = null;
+                const status = document.getElementById('sampleStatus');
+                if (status) status.textContent = 'Sample Mode: no sample';
+            }
+        } catch (e) {
+            console.warn('Mode exclusivity update warning:', e);
+        }
+    }
+
+    if (modePresetsBtn && modeMidiBtn) {
+        modePresetsBtn.addEventListener('click', () => setMode('presets'));
+        modeMidiBtn.addEventListener('click', () => setMode('midi'));
+        // default to presets
+        setMode('presets');
+    }
+
+    // ============================================================
+    // CONTEXT MENU per rimuovere l'assegnazione grafico-knob
+    // ============================================================
+    
+    const contextMenu = document.getElementById('knobContextMenu');
+    const removeControlItem = document.getElementById('removeControl');
+    let contextMenuKnob = null;
+
+    // Funzione per rimuovere l'assegnazione di un grafico da una knob
+    function removeKnobAssignment(knobId) {
+        if (!knobId || !knobAssignments[knobId]) return;
+        
+        // Rimuovi l'assegnazione
+        delete knobAssignments[knobId];
+        
+        // Rimuovi la classe colorata dalla label
+        const knobElement = document.getElementById(knobId);
+        if (knobElement) {
+            const effectParam = knobElement.closest('.effect-param');
+            if (effectParam) {
+                effectParam.classList.remove('assigned-temp', 'assigned-dens', 'assigned-vel');
+            }
+        }
+        
+        console.log(`Assegnazione rimossa per knob ${knobId}`);
+    }
+
+    // Aggiungi event listener per click destro su tutte le knob
+    allKnobs.forEach(knob => {
+        knob.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            
+            const knobId = knob.id;
+            
+            // Mostra il menu solo se la knob ha un'assegnazione
+            if (knobId && knobAssignments[knobId]) {
+                contextMenuKnob = knobId;
+                
+                // Posiziona il menu alla posizione del mouse
+                contextMenu.style.left = `${e.pageX}px`;
+                contextMenu.style.top = `${e.pageY}px`;
+                contextMenu.style.display = 'block';
+            }
+        });
+    });
+
+    // Click sul menu item "Remove Control"
+    removeControlItem.addEventListener('click', () => {
+        if (contextMenuKnob) {
+            removeKnobAssignment(contextMenuKnob);
+            contextMenuKnob = null;
+        }
+        contextMenu.style.display = 'none';
+    });
+
+    // Chiudi il menu quando si clicca altrove
+    document.addEventListener('click', (e) => {
+        if (!contextMenu.contains(e.target)) {
+            contextMenu.style.display = 'none';
+            contextMenuKnob = null;
+        }
+    });
+
+    // Chiudi il menu quando si scorre
+    document.addEventListener('scroll', () => {
+        contextMenu.style.display = 'none';
+        contextMenuKnob = null;
+    });
+
+    // ============================================================
+    // END CONTEXT MENU
+    // ============================================================
+
+    // ============================================================
+    // END DRAG AND DROP SYSTEM
+    // ============================================================
 
     // --- Initialize MIDI Output ---
     try {
@@ -1021,7 +1544,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (selectedId && midiAccess) {
                         midiOutput = midiAccess.outputs.get(selectedId);
                         if (midiOutput) {
-                            statusEl.textContent = `MIDI: ${midiOutput.name} selezionato`;
+                            if (statusEl) statusEl.textContent = `MIDI: ${midiOutput.name} selezionato`;
                             toggleBtn.disabled = false;
                         }
                     } else {
@@ -1029,7 +1552,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         midiEnabled = false;
                         toggleBtn.textContent = 'Attiva MIDI';
                         toggleBtn.disabled = true;
-                        statusEl.textContent = 'MIDI: nessun dispositivo selezionato';
+                        if (statusEl) statusEl.textContent = 'MIDI: nessun dispositivo selezionato';
                     }
                 });
                 
@@ -1039,13 +1562,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     midiEnabled = !midiEnabled;
                     if (midiEnabled) {
                         toggleBtn.textContent = 'Disattiva MIDI';
-                        statusEl.textContent = `MIDI: attivo → ${midiOutput.name}`;
+                        if (statusEl) statusEl.textContent = `MIDI: attivo → ${midiOutput.name}`;
                         toggleBtn.style.background = 'rgba(52, 211, 153, 0.2)';
                         toggleBtn.style.color = '#34d399';
                         toggleBtn.style.borderColor = 'rgba(52, 211, 153, 0.6)';
                     } else {
                         toggleBtn.textContent = 'Attiva MIDI';
-                        statusEl.textContent = 'MIDI: disattivo';
+                        if (statusEl) statusEl.textContent = 'MIDI: disattivo';
                         toggleBtn.style.background = '';
                         toggleBtn.style.color = '';
                         toggleBtn.style.borderColor = '';
@@ -1082,62 +1605,62 @@ document.addEventListener('DOMContentLoaded', () => {
         // Distortion controls
         setupEffectKnob('distortionDriveKnob', (value) => {
             if (distortion) distortion.distortion = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('distortionToneKnob', (value) => {
             // Oversample quality: 'none', '2x', '4x'
             // Map 0-1 to quality levels (approximated with distortion curve)
             // For simplicity, we'll just adjust the distortion amount as a "tone" control
             if (distortion) distortion.distortion = Math.max(0, distortion.distortion) * (0.5 + value * 0.5);
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('distortionMixKnob', (value) => {
             if (distortion) distortion.wet.value = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
 
         // Chorus controls
         setupEffectKnob('chorusDepthKnob', (value) => {
             if (chorus) chorus.depth = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('chorusRateKnob', (value) => {
             // Map to frequency 0.1Hz - 10Hz
             if (chorus) chorus.frequency.value = 0.1 + value * 9.9;
-        });
+        }, 0, (v) => `${(0.1 + v * 9.9).toFixed(1)} Hz`);
         
         setupEffectKnob('chorusMixKnob', (value) => {
             if (chorus) chorus.wet.value = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
 
         // Delay controls
         setupEffectKnob('delayTimeKnob', (value) => {
             // Map to delay time 0.01s - 1s
             if (delay) delay.delayTime.value = 0.01 + value * 0.99;
-        });
+        }, 0, (v) => `${((0.01 + v * 0.99) * 1000).toFixed(0)} ms`);
         
         setupEffectKnob('delayFeedbackKnob', (value) => {
             // Feedback 0 - 0.9 (avoid runaway feedback)
             if (delay) delay.feedback.value = value * 0.9;
-        });
+        }, 0, (v) => `${Math.round(v * 90)}%`);
         
         setupEffectKnob('delayMixKnob', (value) => {
             if (delay) delay.wet.value = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
 
         // Reverb controls
         setupEffectKnob('reverbDecayKnob', (value) => {
             // Decay time 0.1s - 10s
             if (reverb) reverb.decay = 0.1 + value * 9.9;
-        });
+        }, 0, (v) => `${(0.1 + v * 9.9).toFixed(1)} s`);
         
         setupEffectKnob('reverbMixKnob', (value) => {
             if (reverb) reverb.wet.value = value;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('reverbSizeKnob', (value) => {
             // PreDelay acts as "size" - map 0-0.1s
             if (reverb) reverb.preDelay = value * 0.1;
-        });
+        }, 0, (v) => `${Math.round(v * 100)}%`);
 
         // Toggle buttons
         document.querySelectorAll('.effect-toggle').forEach(toggle => {
@@ -1145,6 +1668,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.classList.toggle('active');
                 const effectName = this.getAttribute('data-effect');
                 const isActive = this.classList.contains('active');
+                
+                // Update button text and state
+                this.textContent = isActive ? 'ON' : 'OFF';
                 
                 // Enable/disable effect by setting wet to 0 or restoring last value
                 switch(effectName) {
@@ -1188,6 +1714,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                         break;
+                    // filters temporarily disabled
                 }
             });
         });
@@ -1205,9 +1732,8 @@ window.addEventListener('resize', () => {
 
 
 chartTemp.data.datasets[0].label = "Temperatura";
-chartDens.data.datasets[0].label = "Densità";
-chartVel.data.datasets[0].label  = "Velocità";
-
+        chartDens.data.datasets[0].label = "Densità (protons/cm^3)";
+        chartVel.data.datasets[0].label  = "Velocità (km/s)";
 // Sincronizzazione tooltip / hover tra i grafici
 function attachSync(master, slaves) {
     const canvas = master.canvas;
@@ -1324,8 +1850,12 @@ async function updateCharts() {
         chartVel.update("none");
 
         // Aggiorna anche la preview chart se presente, per mantenerla sincronizzata con i nuovi dati
-        const radio = document.querySelector('input[name="chartSource"]:checked');
-        if (radio) updatePreview(radio.value);
+        updatePreview(selectedChartSource);
+
+        // Aggiorna tutte le knob assegnate con i nuovi dati
+        if (typeof window.updateAllAssignedKnobs === 'function') {
+            window.updateAllAssignedKnobs();
+        }
 
         console.log("realHighlightIndex before adjust:", xSpacing, realHighlightIndex);
         realHighlightIndex = realHighlightIndex - xSpacing - 1;
@@ -1389,6 +1919,11 @@ function advanceHighlight() {
         highlightIndexTime = currIdxTime;
         // process the moving marker: detect original points near it and trigger highlights/notes
         processMovingDotForIndex(highlightIndex);
+        
+        // Aggiorna tutte le knob assegnate con il valore corrente
+        if (typeof window.updateAllAssignedKnobs === 'function') {
+            window.updateAllAssignedKnobs(highlightIndex);
+        }
     }
     updateHighlightRender();
     console.log("realHighlightIndex:", realHighlightIndex, "currentOriginalPointIndex:", currentOriginalPointIndex); 
@@ -1475,10 +2010,9 @@ function setHighlightSpeed(ms) {
     }
 }
 
-// Restituisce la chart selezionata dal select vicino alla tastiera
+// Restituisce la chart selezionata (clic sulla chart)
 function getSelectedChart() {
-    const radio = document.querySelector('input[name="chartSource"]:checked');
-    const value = radio ? radio.value : 'Temp';
+    const value = selectedChartSource || 'Temp';
     if (value === 'Temp') return { chart: chartTemp, label: 'Temperatura' };
     if (value === 'Dens') return { chart: chartDens, label: 'Densità' };
     return { chart: chartVel, label: 'Velocità' };
@@ -1537,13 +2071,18 @@ function getCurrentSelectedValue() {
     }
 
 // Setup generic effect knob with drag interaction
-function setupEffectKnob(knobId, callback) {
+function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = null) {
     const knob = document.getElementById(knobId);
     if (!knob) return;
     
     let isDragging = false;
     let startY = 0;
     let startValue = 0; // 0 to 1 range
+    
+    // Find the param-label element
+    const effectParam = knob.closest('.effect-param');
+    const paramLabel = effectParam ? effectParam.querySelector('.param-label') : null;
+    let originalLabelText = paramLabel ? paramLabel.textContent : '';
     
     // Map knob rotation to effect value (0 -> 1)
     const updateKnobRotation = (value) => {
@@ -1555,6 +2094,13 @@ function setupEffectKnob(knobId, callback) {
     
     // Initialize at 0 (no effect)
     updateKnobRotation(0);
+    
+    // Double-click to reset to default
+    knob.addEventListener('dblclick', (e) => {
+        updateKnobRotation(defaultValue);
+        callback(defaultValue);
+        e.preventDefault();
+    });
     
     knob.addEventListener('mousedown', (e) => {
         isDragging = true;
@@ -1577,19 +2123,33 @@ function setupEffectKnob(knobId, callback) {
         if (!isDragging) return;
         
         const deltaY = startY - e.clientY; // Up is positive
-        const sensitivity = 0.005; // Adjust sensitivity
+        
+        // Check if this knob has a chart assigned - use different sensitivity
+        const hasChartAssigned = window.knobAssignments && window.knobAssignments[knobId];
+        const sensitivity = hasChartAssigned ? 0.002 : 0.005; // More sensitive when chart assigned
         
         let newValue = startValue + (deltaY * sensitivity);
         newValue = Math.max(0, Math.min(1, newValue));
         
         updateKnobRotation(newValue);
         callback(newValue);
+        
+        // Update label with value only if no chart is assigned and formatter is provided
+        if (!hasChartAssigned && paramLabel && valueFormatter) {
+            paramLabel.textContent = valueFormatter(newValue);
+        }
     });
     
     document.addEventListener('mouseup', () => {
         if (isDragging) {
             isDragging = false;
             document.body.style.cursor = 'default';
+            
+            // Restore original label text if no chart is assigned
+            const hasChartAssigned = window.knobAssignments && window.knobAssignments[knobId];
+            if (!hasChartAssigned && paramLabel) {
+                paramLabel.textContent = originalLabelText;
+            }
         }
     });
 }
@@ -1639,12 +2199,27 @@ if (speedKnobControl) {
     // Initialize metronome BPM
     updateMetronomeBPM(initialBpm);
 
+    // Double-click to reset to default (200ms = ~150 BPM)
+    speedKnobControl.addEventListener('dblclick', (e) => {
+        const defaultSpeed = 200;
+        setHighlightSpeed(defaultSpeed);
+        updateKnobRotation(defaultSpeed);
+        const bpm = msToBpm(defaultSpeed);
+        if (speedValue) {
+            speedValue.textContent = `${bpm} BPM`;
+            speedValue.classList.add('visible');
+            setTimeout(() => speedValue.classList.remove('visible'), 800);
+        }
+        updateMetronomeBPM(bpm);
+        e.preventDefault();
+    });
+
     speedKnobControl.addEventListener('mousedown', (e) => {
         isDragging = true;
         startY = e.clientY;
         startSpeed = highlightSpeed;
         document.body.style.cursor = 'ns-resize';
-        e.preventDefault(); // Prevent text selection
+        e.preventDefault();
         
         // Show tooltip
         if (speedValue) speedValue.classList.add('visible');
@@ -1690,11 +2265,11 @@ if (playPauseBtn) {
     playPauseBtn.addEventListener('click', () => {
         if (!isPlaying) {
             startHighlighting(highlightSpeed);
-            playPauseBtn.textContent = 'Pause';
+            playPauseBtn.classList.add('playing');
             isPlaying = true;
         } else {
             stopHighlighting();
-            playPauseBtn.textContent = 'Play';
+            playPauseBtn.classList.remove('playing');
             isPlaying = false;
         }
     });
@@ -1707,7 +2282,7 @@ if (resetBtn) {
         // Stop playback if playing
         if (isPlaying) {
             stopHighlighting();
-            playPauseBtn.textContent = 'Play';
+            playPauseBtn.classList.remove('playing');
             isPlaying = false;
         }
         // Reset cursor to initial position
@@ -1789,71 +2364,7 @@ if (recordBtn) {
     });
 }
 
-// Volume knob control
-const volumeKnobControl = document.getElementById('volumeKnobControl');
-const volumeValue = document.getElementById('volumeValue');
-
-if (volumeKnobControl) {
-    let isDragging = false;
-    let startY = 0;
-    let startVolume = 0; // dB value
-    // Min and max volume (dB)
-    const minVolume = -40;
-    const maxVolume = 6;
-    
-    const updateKnobRotation = (volumeDb) => {
-        // Normalize volume to 0-1 range
-        const t = (volumeDb - minVolume) / (maxVolume - minVolume);
-        const angle = -135 + t * 270;
-        volumeKnobControl.style.transform = `rotate(${angle}deg)`;
-    };
-    
-    const setMasterVolume = (volumeDb) => {
-        ensureToneStarted();
-        if (masterVolume) {
-            masterVolume.volume.value = volumeDb;
-        }
-    };
-    
-    // Initialize at 0 dB
-    updateKnobRotation(0);
-    setMasterVolume(0);
-    if (volumeValue) volumeValue.textContent = '0 dB';
-    
-    volumeKnobControl.addEventListener('mousedown', (e) => {
-        isDragging = true;
-        startY = e.clientY;
-        startVolume = masterVolume ? masterVolume.volume.value : 0;
-        document.body.style.cursor = 'ns-resize';
-        e.preventDefault();
-        
-        if (volumeValue) volumeValue.classList.add('visible');
-    });
-    
-    document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        
-        const deltaY = startY - e.clientY;
-        const sensitivity = 0.2; // dB per pixel
-        
-        let newVolume = startVolume + (deltaY * sensitivity);
-        newVolume = Math.max(minVolume, Math.min(maxVolume, newVolume));
-        newVolume = Math.round(newVolume * 10) / 10; // Round to 0.1 dB
-        
-        setMasterVolume(newVolume);
-        updateKnobRotation(newVolume);
-        if (volumeValue) volumeValue.textContent = `${newVolume >= 0 ? '+' : ''}${newVolume.toFixed(1)} dB`;
-    });
-    
-    document.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            document.body.style.cursor = 'default';
-            
-            if (volumeValue) volumeValue.classList.remove('visible');
-        }
-    });
-}
+attachVolumeSlider();
 
 /* ============================================================
    6) TASTIERA VERTICALE – 2 OTTAVE
@@ -1911,36 +2422,58 @@ function drawVerticalKeyboard() {
 }
 
 function syncPreviewHeight() {
-    // Force a fixed preview size (do not follow window/keyboard resizing)
-    const FIXED_W_CSS = 300; // CSS pixels for canvas width
-    const FIXED_H_CSS = 320; // CSS pixels for canvas height
-    const PREVIEW_BOX_W = 320; // container width
-    const PREVIEW_BOX_H = 360; // container height (including margins)
-
+    // Match preview chart height to keyboard height, and width to container
     const canvas = document.getElementById('chartPreview');
     if (!canvas) return;
+
+    const previewBox = canvas.closest('.preview-box');
+    if (!previewBox) return;
+
+    const kbCont = document.getElementById('keyboardContainer');
     const devicePR = window.devicePixelRatio || 1;
 
-    // set the parent keyboard container height to match the preview so they align
-    try {
-        const kbCont = document.getElementById('keyboardContainer');
-        if (kbCont) {
-            kbCont.style.height = PREVIEW_BOX_H + 'px';
-            kbCont.style.overflowY = 'auto';
-        }
-    } catch (e) { /* noop */ }
+    // Determine keyboard rendered height
+    let keyboardHeight = 0;
+    if (kbCont) {
+        // Use offsetHeight (rendered height). If empty, fallback to scrollHeight
+        keyboardHeight = Math.max(kbCont.offsetHeight || 0, kbCont.scrollHeight || 0);
+    } else {
+        // Fallback to current preview height
+        keyboardHeight = previewBox.clientHeight;
+    }
 
-    // Backing store size (physical pixels) to avoid blurriness on HiDPI
+    // Force preview box to the keyboard height
+    try { previewBox.style.height = keyboardHeight + 'px'; } catch (e) {}
+
+    // Compute canvas size inside the preview box padding
+    const padding = 30; // total vertical padding (15 top + 15 bottom)
+    const cssWidth = Math.max(200, Math.floor(previewBox.clientWidth - padding));
+    const cssHeight = Math.max(100, Math.floor(previewBox.clientHeight - padding));
+
     try {
-        canvas.width = Math.round(FIXED_W_CSS * devicePR);
-        canvas.height = Math.round(FIXED_H_CSS * devicePR);
-        canvas.style.width = FIXED_W_CSS + 'px';
-        canvas.style.height = FIXED_H_CSS + 'px';
-    } catch (e) { /* ignore DOM write errors */ }
+        canvas.width = Math.round(cssWidth * devicePR);
+        canvas.height = Math.round(cssHeight * devicePR);
+        canvas.style.width = cssWidth + 'px';
+        canvas.style.height = cssHeight + 'px';
+    } catch (e) {}
 
     if (chartPreview) {
-        try { chartPreview.resize(); chartPreview.update('none'); } catch (e) { /* noop */ }
+        try { chartPreview.resize(); chartPreview.update('none'); } catch (e) {}
     }
+}
+
+// Observe keyboard/container size changes and resync preview
+let __kbPreviewRO;
+function setupPreviewKeyboardSync() {
+    try {
+        const kbCont = document.getElementById('keyboardContainer');
+        if (!kbCont || typeof ResizeObserver === 'undefined') return;
+        if (__kbPreviewRO) { try { __kbPreviewRO.disconnect(); } catch (_) {} }
+        __kbPreviewRO = new ResizeObserver(() => {
+            syncPreviewHeight();
+        });
+        __kbPreviewRO.observe(kbCont);
+    } catch (e) { /* noop */ }
 }
 
 function createWhiteKey() {
@@ -2088,12 +2621,17 @@ if (presetSelect) {
       // torna a "nessun sample"
       samplePlayer = null;
       sampleLoadedName = null;
-      if (status) status.textContent = 'Sample mode: nessun sample';
+            if (status) status.textContent = 'Sample mode: no sample';
       return;
     }
 
     loadPresetSample(name);
   });
+
+    // Se al load c'è già una selezione (es. default Halo), caricala
+    if (presetSelect.value) {
+        try { loadPresetSample(presetSelect.value); } catch (e) { console.warn('Preset autoload failed', e); }
+    }
 }
 
 
@@ -2114,5 +2652,4 @@ if (rootNoteSelectEl) {
 }
 
 
-// Carica il sample di default
-loadSampleFromUrl('prova.wav', 60, 'prova.wav');
+// No default sample autoload; remain in "No Sample" state until user picks a preset
