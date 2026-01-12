@@ -370,7 +370,7 @@ function startDbMeterLoop() {
             meterAnimationId = null;
             return;
         }
-        let level = outputMeter.getLevel();
+        let level = outputMeter.getValue();
         if (!Number.isFinite(level)) level = -60;
         const colorLevel = level;
         const clamped = Math.max(-60, Math.min(0, level));
