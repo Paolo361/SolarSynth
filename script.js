@@ -370,7 +370,7 @@ function startDbMeterLoop() {
             meterAnimationId = null;
             return;
         }
-        let level = outputMeter.getValue();
+        let level = outputMeter.getLevel();
         if (!Number.isFinite(level)) level = -60;
         const colorLevel = level;
         const clamped = Math.max(-60, Math.min(0, level));
@@ -1110,16 +1110,27 @@ function playSampleAtMidi(midi) {
     }
 }
 
+/* ============================================================
+   MODIFICA 1: Rimuovere il blocco sulle note ripetute
+   e ridurre il cooldown per permettere note veloci
+============================================================ */
+// Riduci il cooldown globale (dichiaralo in cima se non lo trovi, o modificalo)
+// const playCooldown = 50; // Mettilo a 50ms o anche 30ms invece di 150
+
 function playMidiIfSelected(midi) {
     if (!midi || typeof midi !== 'number') return;
+    
+    // Rimuoviamo il controllo "midi === lastPlayedMidi" per permettere
+    // ribattuti (stessa nota suonata due volte di fila)
     const now = Date.now();
-    if (midi === lastPlayedMidi && (now - lastPlayTime) < playCooldown) return; // throttle
+    // Usa un cooldown molto breve (es. 50ms) solo per evitare glitch audio estremi,
+    // ma permetti di suonare tutto.
+    if ((now - lastPlayTime) < 50) return; 
 
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return;
-    const numKeys = keyboard.children.length;
-    if (numKeys <= 0) return;
-    // Find the DOM key element that has this midi assigned (data-midi)
+    
+    // Trova l'elemento tasto
     let keyEl = null;
     for (let i = 0; i < keyboard.children.length; i++) {
         const k = keyboard.children[i];
@@ -1127,27 +1138,44 @@ function playMidiIfSelected(midi) {
     }
     if (!keyEl) return;
 
-    // play only if key was previously toggled selected by user
+    // Se il tasto non è selezionato (non fa parte della scala o non è attivo), usciamo.
+    // NOTA: Se vuoi che suoni SEMPRE anche se non evidenziato, commenta questa riga:
     if (!keyEl.classList.contains('selectedKey')) return;
 
     try {
-        // If MIDI output is enabled, send MIDI note instead of playing sample
+        // Logica MIDI Out
         if (midiEnabled && midiOutput) {
+            // Nota: Se è la STESSA nota di prima, il synth potrebbe aver bisogno
+            // di un NoteOff prima del nuovo NoteOn se è monofonico, 
+            // ma per ora mandiamo il NoteOn diretto per ribattere.
             playMidiNote(midi);
+            
             lastPlayedMidi = midi;
             lastPlayTime = now;
-            // transient highlight
-            try { keyEl.classList.add('playingKey'); setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
+            
+            // Highlight visivo transitorio
+            try { 
+                keyEl.classList.add('playingKey'); 
+                setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 150); 
+            } catch(e){}
             return;
         }
 
-        // Otherwise, play loaded one-shot sample (if any)
+        // Logica Sample (Audio interno)
         if (!samplePlayer || !samplePlayer.buffer) return;
+        
+        // Qui forziamo il play anche se la nota è la stessa
         playSampleAtMidi(midi);
+        
         lastPlayedMidi = midi;
         lastPlayTime = now;
-        // add transient playing highlight to the DOM key
-        try { keyEl.classList.add('playingKey'); setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
+        
+        // Highlight visivo
+        try { 
+            keyEl.classList.add('playingKey'); 
+            setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 150); 
+        } catch(e){}
+        
     } catch (e) {
         console.warn('Error playing note', e);
     }
@@ -1324,6 +1352,7 @@ let highlightIndexTime = -1; // timestamp dell'ultimo highlight
 let transportLoopId = null; // ID del loop schedulato su Transport per il cursore
 let originalPointIndices = []; // Indici interpolati che corrispondono ai punti originali
 let currentOriginalPointIndex = -1; // Indice corrente nell'array originalPointIndices
+let lastProcessedOriginalPointIndex = -1; // Track last original point that was actually played
 
 const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
@@ -1359,6 +1388,8 @@ function setSelectedChart(source) {
     selectedChartSource = source || 'Temp';
     updateChartSelectionUI();
     updatePreview(selectedChartSource);
+
+
 }
 
 function updatePreview(param = selectedChartSource) {
@@ -1375,12 +1406,15 @@ function updatePreview(param = selectedChartSource) {
     chartPreview.data.datasets[0].borderColor = srcDs.borderColor;
     chartPreview.data.datasets[0].backgroundColor = srcDs.backgroundColor;
     chartPreview.data.datasets[0].label = srcDs.label;
-    chartPreview.update('none');
 
     // ensure plugin knows which Y-values to draw dots for the preview
     if (param === 'Temp') window.originalDataYs = window.originalDataTemp || [];
     else if (param === 'Dens') window.originalDataYs = window.originalDataDens || [];
     else if (param === 'Vel')  window.originalDataYs = window.originalDataVel || [];
+
+    // Enable preview drawing of original points (so points are already at their place when you select)
+    chartPreview.options.plugins.dataPointLines = {};
+    try { chartPreview.update('none'); } catch (e) {}
 }
 
 function attachPreviewMouseTracking() {
@@ -1388,112 +1422,95 @@ function attachPreviewMouseTracking() {
     if (!canvas) return;
     // We intentionally do NOT track mouse movement for playback.
     // Mouse-based highlighting and sound have been removed per user request.
-    canvas.addEventListener('mouseleave', () => {
-        // remove all hover classes
-        const keyboard = document.getElementById('verticalKeyboard');
-        if (keyboard) {
-            for (let i = 0; i < keyboard.children.length; i++) {
-                keyboard.children[i].classList.remove('hoveredKey');
-            }
-        }
-    });
+
     // retain click for potential future interactions (no-op for now)
     canvas.addEventListener('click', (evt) => {});
 }
 
 // When the moving marker (highlightIndex) advances, detect original data points
 // whose X is close to the marker and highlight/play them accordingly.
+/* ============================================================
+   MODIFICA 2: Logica deterministica basata sugli indici originali
+============================================================ */
 function processMovingDotForIndex(idx) {
     try {
-        if (!window.originalDataXs || !window.originalDataXs.length) {
-            // clear quantized classes
-            const keyboard = document.getElementById('verticalKeyboard');
-            if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
-            return;
-        }
+        // Se non abbiamo dati o indici mappati, esci
+        if (!window.originalDataXs || !window.originalDataXs.length) return;
+        
+        // Se stiamo usando la modalità "Precisa" (originalPointIndices esiste),
+        // allora 'idx' È GIÀ l'indice esatto del punto. Non serve calcolare distanze.
+        if (originalPointIndices && originalPointIndices.length > 0) {
+            
+            // Recupera il dato Y (Temp, Dens o Vel a seconda di cosa visualizzi)
+            // Nota: window.originalDataYs viene settato in updateCharts/updatePreview
+            const ys = window.originalDataYs || window.originalDataTemp || [];
+            
+            // Dobbiamo trovare a QUALE punto originale corrisponde questo indice interpolato 'idx'.
+            // Poiché in advanceHighlight usiamo 'currentOriginalPointIndex', possiamo usare quello
+            // se è sincronizzato, oppure cercare l'indice.
+            // Per sicurezza, usiamo l'indice corrente tracciato in advanceHighlight:
+            const dataIndex = currentOriginalPointIndex; 
+            
+            if (dataIndex >= 0 && dataIndex < ys.length) {
+                // Controllo anti-doppione: suona solo se è un punto nuovo rispetto all'ultimo processato
+                if (dataIndex !== lastProcessedOriginalPointIndex) {
+                    
+                    const yVal = ys[dataIndex];
+                    
+                    if (Number.isFinite(yVal)) {
+                        lastProcessedOriginalPointIndex = dataIndex; // Segna come suonato
 
-        const interp = chartTemp.data.datasets[0].data || [];
-        if (!interp.length || idx < 0 || idx >= interp.length) return;
+                        // --- Calcolo MIDI (Copied from original logic) ---
+                        let minY, maxY;
+                        if (chartPreview && chartPreview.scales && chartPreview.scales.y) {
+                            minY = chartPreview.scales.y.min;
+                            maxY = chartPreview.scales.y.max;
+                        } else {
+                            const numericYs = ys.filter(v => Number.isFinite(v));
+                            minY = numericYs.length ? Math.min(...numericYs) : 0;
+                            maxY = numericYs.length ? Math.max(...numericYs) : 100;
+                        }
 
-        const movingX = interp[idx].x;
+                        let midi = 48;
+                        if (maxY !== minY) {
+                            const ratio = (yVal - minY) / (maxY - minY);
+                            midi = Math.round(48 + ratio * (83 - 48));
+                            midi = Math.max(48, Math.min(83, midi));
+                        }
 
-        // estimate spacing between interpolated points (fallback to reasonable ms value)
-        let spacing = null;
-        if (interp.length > 1) spacing = Math.abs(interp[1].x - interp[0].x);
-        else if (window.originalDataXs.length > 1) spacing = Math.abs(window.originalDataXs[1] - window.originalDataXs[0]) / 2;
-        if (!spacing || !isFinite(spacing)) spacing = 1000; // 1s fallback
-
-        const xs = window.originalDataXs;
-        const ys = window.originalDataYs || window.originalDataTemp || window.originalDataDens || window.originalDataVel || [];
-
-        // clear previous auto-quantized highlights
-        const keyboard = document.getElementById('verticalKeyboard');
-        if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
-
-        // Usa i limiti dell'asse Y del grafico invece dei dati grezzi
-        let minY, maxY;
-        if (chartPreview && chartPreview.scales && chartPreview.scales.y) {
-            minY = chartPreview.scales.y.min;
-            maxY = chartPreview.scales.y.max;
-        } else {
-            // Fallback ai dati grezzi se il grafico non è disponibile
-            const numericYs = ys.filter(v => Number.isFinite(v));
-            const hasNumeric = numericYs.length > 0;
-            minY = hasNumeric ? Math.min(...numericYs) : 0;
-            maxY = hasNumeric ? Math.max(...numericYs) : minY + 1;
-        }
-
-        // compute average original spacing to set a robust threshold
-        let avgOrigSpacing = null;
-        if (xs.length > 1) {
-            let sum = 0;
-            for (let i = 1; i < xs.length; i++) sum += Math.abs(xs[i] - xs[i-1]);
-            avgOrigSpacing = sum / (xs.length - 1);
-        }
-        if (!avgOrigSpacing || !isFinite(avgOrigSpacing)) avgOrigSpacing = spacing;
-
-        // choose threshold as the larger of (1.5 * interpolated spacing) and (0.6 * average original spacing)
-        const threshold = Math.max(spacing * 1.5, avgOrigSpacing * 0.6);
-
-        // find single nearest original point to the moving marker
-        let nearestIdx = -1;
-        let minDx = Infinity;
-        for (let i = 0; i < xs.length; i++) {
-            const dx = Math.abs(xs[i] - movingX);
-            if (dx < minDx) { minDx = dx; nearestIdx = i; }
-        }
-
-        if (nearestIdx >= 0 && minDx <= threshold) {
-            const yVal = ys[nearestIdx];
-            if (Number.isFinite(yVal)) {
-                // compute midi
-                let midi = 48;
-                if (maxY !== minY) {
-                    const ratio = (yVal - minY) / (maxY - minY);
-                    midi = Math.round(48 + ratio * (83 - 48));
-                    midi = Math.max(48, Math.min(83, midi));
-                }
-
-                // highlight corresponding key (visual) regardless of selection
-                if (keyboard) {
-                    for (let k = 0; k < keyboard.children.length; k++) {
-                        const el = keyboard.children[k];
-                        if (el && el.dataset && Number(el.dataset.midi) === midi) {
-                            el.classList.add('quantizedKey');
+                        // --- Highlight e Play ---
+                        const keyboard = document.getElementById('verticalKeyboard');
+                        if (keyboard) {
+                            // Rimuovi vecchi highlight quantizzati
+                            for (let k = 0; k < keyboard.children.length; k++) {
+                                keyboard.children[k].classList.remove('quantizedKey');
+                            }
                             
-                            // Send MIDI to Minilogue XD if enabled
-                            playMidiNote(midi);
-                            
-                            // attempt to play the requested midi; if not selected, fallback to nearest selected
-                            triggerPlayWithFallback(midi);
-                            break;
+                            // Trova e attiva il tasto
+                            for (let k = 0; k < keyboard.children.length; k++) {
+                                const el = keyboard.children[k];
+                                if (el && el.dataset && Number(el.dataset.midi) === midi) {
+                                    el.classList.add('quantizedKey');
+                                    
+                                    // SUONA ORA!
+                                    // Usa triggerPlayWithFallback che gestisce la logica 
+                                    // "suona solo se selezionato" o "trova il più vicino"
+                                    triggerPlayWithFallback(midi);
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
             }
+            return; // Fine logica precisa
         }
+
+        // ... Qui sotto rimarrebbe la logica vecchia "fallback" per interpolazione pura
+        // se originalPointIndices non fosse disponibile, ma nel tuo caso lo è sempre dopo il fetch.
+        
     } catch (e) {
-        // ignore any errors in audio/highlight processing
+        console.warn("Errore process audio:", e);
     }
 }
 
@@ -2109,32 +2126,35 @@ window.addEventListener('resize', () => {
 chartTemp.data.datasets[0].label = "Temperatura";
         chartDens.data.datasets[0].label = "Densità (protons/cm^3)";
         chartVel.data.datasets[0].label  = "Velocità (km/s)";
-// Sincronizzazione tooltip / hover tra i grafici
+// Sincronizzazione tooltip / hover: solo verso il chart di preview abilitato (per evitare pallini sui mini-chart)
 function attachSync(master, slaves) {
     const canvas = master.canvas;
     canvas.addEventListener('mousemove', (evt) => {
         const points = master.getElementsAtEventForMode(evt, 'nearest', { intersect: false });
         if (!points.length) return;
         const idx = points[0].index;
-        // set active elements on slaves
-        slaves.forEach(s => {
+
+        // Aggiorna il preview solo se è abilitato a mostrare i punti
+        if (typeof chartPreview !== 'undefined' && chartPreview && chartPreview.options && chartPreview.options.plugins && chartPreview.options.plugins.dataPointLines) {
             try {
-                s.setActiveElements([{datasetIndex: 0, index: idx}]);
+                chartPreview.setActiveElements([{datasetIndex: 0, index: idx}]);
                 // position event for tooltip - use center x of the element if available
-                const el = s.getDatasetMeta(0).data[idx];
+                const el = chartPreview.getDatasetMeta(0).data[idx] || master.getDatasetMeta(0).data[idx];
                 const pos = el ? {x: el.x, y: el.y} : {x: evt.offsetX, y: evt.offsetY};
-                if (s.tooltip && typeof s.tooltip.setActiveElements === 'function') {
-                    s.tooltip.setActiveElements([{datasetIndex:0, index: idx}], pos);
+                if (chartPreview.tooltip && typeof chartPreview.tooltip.setActiveElements === 'function') {
+                    chartPreview.tooltip.setActiveElements([{datasetIndex:0, index: idx}], pos);
                 }
-                s.update('none');
+                chartPreview.update('none');
             } catch (e) { /* noop */ }
-        });
+        }
+
+        // Non impostiamo active elements sugli altri mini-chart per evitare effetti di hover che mostrano i pallini
     });
 
     canvas.addEventListener('mouseleave', () => {
-        slaves.forEach(s => {
-            try { s.setActiveElements([]); if (s.tooltip && typeof s.tooltip.setActiveElements === 'function') s.tooltip.setActiveElements([]); s.update('none'); } catch(e){}
-        });
+        if (typeof chartPreview !== 'undefined' && chartPreview && chartPreview.tooltip && typeof chartPreview.tooltip.setActiveElements === 'function') {
+            try { chartPreview.setActiveElements([]); chartPreview.tooltip.setActiveElements([]); chartPreview.update('none'); } catch(e){}
+        }
     });
 }
 
@@ -2275,7 +2295,14 @@ function advanceHighlight() {
     // Se abbiamo la mappatura precisa dei punti originali, usala
     if (originalPointIndices && originalPointIndices.length > 0) {
         // Avanza all'indice successivo nell'array dei punti originali
+        const prevIndex = currentOriginalPointIndex;
         currentOriginalPointIndex = (currentOriginalPointIndex + 1) % originalPointIndices.length;
+        
+        // If we wrapped around to the beginning, reset the processed points tracker
+        if (prevIndex >= 0 && currentOriginalPointIndex === 0) {
+            lastProcessedOriginalPointIndex = -1;
+        }
+        
         highlightIndex = originalPointIndices[currentOriginalPointIndex];
         realHighlightIndex = highlightIndex;
     } else {
@@ -2283,7 +2310,11 @@ function advanceHighlight() {
         const originalCount = window.originalDataXs ? window.originalDataXs.length : 60;
         const skipPoints = Math.max(1, Math.round(len / originalCount));
         let next = highlightIndex + skipPoints;
-        if (next >= len) next = 0;
+        if (next >= len) {
+            next = 0;
+            // Reset when wrapping around
+            lastProcessedOriginalPointIndex = -1;
+        }
         highlightIndex = next;
         realHighlightIndex = next;
     }
@@ -2333,6 +2364,7 @@ function startHighlighting(speedMs = 200) {
         currentOriginalPointIndex = -1;
         highlightIndex = -1;
         realHighlightIndex = -1;
+        lastProcessedOriginalPointIndex = -1; // Reset processed points when starting fresh
     }
     
     // Mark that we're using Transport instead of setInterval
@@ -2361,6 +2393,9 @@ function stopHighlighting() {
         quantizeTimer = null;
     }
     highlightTimer = null;
+    
+    // Reset last processed point to allow replaying from start
+    lastProcessedOriginalPointIndex = -1;
     
     // clear any auto-quantized highlights
     try {
@@ -2666,6 +2701,7 @@ if (resetBtn) {
         highlightIndexTime = null;
         currIdxTime = null;
         currentOriginalPointIndex = -1;
+        lastProcessedOriginalPointIndex = -1; // Reset processed points tracker
         
         // Reset Transport position to start
         if (typeof Tone !== 'undefined' && Tone.Transport) {
@@ -2855,19 +2891,25 @@ function createWhiteKey() {
     const key = document.createElement('div');
     key.classList.add('key');
     key.classList.add('white');
-    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
-    }
-    return key;    
-}
+    key.style.cursor = 'pointer';
+    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key)); };
+    // Visual hover: add/remove hoveredKey when mouse enters/leaves
+    key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
+    key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
+    return key;
+} 
 
 function createBlackKey() {
     const key = document.createElement('div');
     key.classList.add('key');
     key.classList.add('black');
-    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key));
-    }
-    return key;    
-}
+    key.style.cursor = 'pointer';
+    key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key)); };
+    // Visual hover: add/remove hoveredKey when mouse enters/leaves
+    key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
+    key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
+    return key;
+} 
 
 function highlightKey(i) {
     const keyboard = document.getElementById('verticalKeyboard');
@@ -2941,14 +2983,16 @@ function quantizeHighlightToKey() {
 
     // rimuovi solo la classe di quantizzazione precedente (non rimuovere le selezioni utente)
     for (let k = 0; k < keys.length; k++) {
-        keys[k].classList.remove('selectedKey');
+        keys[k].classList.remove('quantizedKey');
     }
 
     // Aggiungi indicazione di quantizzazione (classe separata) alla chiave calcolata
     if (key >= 0 && key < numKeys) {
-        const target = keys[numKeys - key];
+        // DOM order: 0 is top, last is bottom. getKeyIndexFromValue returns 0..numKeys-1 with 0=minimum value (bottom),
+        // so convert to DOM index by mirroring
+        const target = keys[numKeys - 1 - key];
         if (target) {
-            target.classList.add('selectedKey');
+            target.classList.add('quantizedKey');
             // se la key è stata selezionata dall'utente, suona la nota corrispondente
             try {
                 if (target.classList.contains('selectedKey')) {
