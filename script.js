@@ -1004,35 +1004,55 @@ function attachVolumeSlider() {
 
 function initMetronome() {
     try {
-        // Create a short click sound for metronome
-        metronomeVolume = new Tone.Volume(-6).toDestination();
+        // 1. VOLUME: Abbassiamo un po' il volume per non renderlo fastidioso
+        metronomeVolume = new Tone.Volume(-10).toDestination();
         metronomePanner = new Tone.Panner(0).connect(metronomeVolume);
+
+        // 2. SUONO: Configuriamo il synth per sembrare un Woodblock/Click secco
+        // Usiamo un attacco velocissimo e un decadimento breve
         metronomeOsc = new Tone.MembraneSynth({
-            pitchDecay: 0.008,
-            octaves: 2,
+            pitchDecay: 0.01,  // Molto veloce per l'effetto "click"
+            octaves: 1,        // Meno estensione sulle basse frequenze
+            oscillator: { type: 'sine' }, // Onda sinusoidale pura per pulizia
             envelope: {
-                attack: 0.001,
-                decay: 0.05,
+                attack: 0.001, // Attacco immediato
+                decay: 0.1,    // Coda molto corta (secco)
                 sustain: 0,
-                release: 0.05
+                release: 0.1
             }
         }).connect(metronomePanner);
         
-        // Schedule metronome on Transport (plays only if enabled)
+        // 3. LOGICA DEL LOOP (SCHEDULING)
+        // Impostiamo la ripetizione su '4n' (semiminima/quarto).
+        // Dato che il tuo cursore si muove a '2n' (minima), questo farà 2 battiti per ogni spostamento.
         Tone.Transport.scheduleRepeat((time) => {
             if (metronomeEnabled) {
-                metronomeOsc.triggerAttackRelease('C4', '16n', time);
+                // Otteniamo la posizione corrente nel formato "bars:quarters:sixteenths"
+                // Esempio: "0:0:0", "0:1:0", "0:2:0"
+                const position = Tone.Transport.position.split(':');
+                const quarter = parseInt(position[1]);
+
+                // 4. ACCENTO:
+                // Se siamo sui quarti pari (0, 2), siamo allineati con il cursore (Downbeat) -> Nota Alta
+                // Se siamo sui quarti dispari (1, 3), siamo nel mezzo (Upbeat) -> Nota Bassa
+                if (quarter % 2 === 0) {
+                    // Click Alto (Suono primario) - Più acuto (G5)
+                    metronomeOsc.triggerAttackRelease('G6', '32n', time, 1); 
+                } else {
+                    // Click Basso (Suddivisione) - Meno acuto (C6) e leggermente più piano (velocity 0.6)
+                    metronomeOsc.triggerAttackRelease('C6', '32n', time, 0.6);
+                }
             }
-        }, '2n'); // Every half measure (full beat)
+        }, '4n'); // <--- Qui sta la magia: '4n' è il doppio della velocità del cursore ('2n')
         
-        // Schedule cursor advance on Transport (always runs when playing)
+        // --- LOOP DEL CURSORE (RIMANE INVARIATO A '2n') ---
+        // Questo assicura che il cursore continui a muoversi lentamente mentre il metronomo batte il doppio
+        // Rimuoviamo Tone.Draw da qui. La logica deve scattare PRECISA col metronomo.
         transportLoopId = Tone.Transport.scheduleRepeat((time) => {
-            // Schedule the UI update slightly ahead of audio time for visual sync
-            Tone.Draw.schedule(() => {
-                advanceHighlight();
-            }, time);
-        }, '2n'); // Every half note (half beat), synced with metronome
+            advanceHighlight(time); // Passiamo 'time' alla funzione
+        }, '2n');
         
+        console.log('Metronome initialized: Woodblock style, 2 clicks per data step.');
     } catch (e) {
         console.warn('Failed to initialize metronome', e);
     }
@@ -1287,21 +1307,21 @@ function trackSampleVoice(player) {
     return cleanup;
 }
 
-function playSampleAtMidi(midi) {
+function playSampleAtMidi(midi, time) { // Aggiungi parametro time
     try {
         if (!samplePlayer || !samplePlayer.buffer) {
             console.warn('No sample loaded or buffer missing');
             return false;
         }
-        const root = 60; // Fixed root MIDI (C4)
+        const root = 60; 
         const semitoneShift = midi - root;
+
+        console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
 
         // Ensure audio context is started
         ensureToneStarted();
-
         pruneSampleVoices();
 
-        // Clone player from buffer to allow overlapping oneshots
         const temp = new Tone.Player(samplePlayer.buffer);
         const cleanup = trackSampleVoice(temp);
         
@@ -1312,9 +1332,8 @@ function playSampleAtMidi(midi) {
             temp.connect(masterVolume);
         }
         
-        temp.volume.value = -4; // Reduce individual sample volume to prevent summing overload
+        temp.volume.value = -4; 
         
-        // Calculate playback rate for pitch shifting (2^(semitones/12))
         const playbackRate = Math.pow(2, semitoneShift / 12);
         if (temp.playbackRate instanceof Tone.Signal || (temp.playbackRate && typeof temp.playbackRate.value !== 'undefined')) {
             temp.playbackRate.value = playbackRate;
@@ -1322,9 +1341,13 @@ function playSampleAtMidi(midi) {
             temp.playbackRate = playbackRate;
         }
         
-        temp.start();
+        // QUI È IL TRUCCO: Se c'è 'time', usalo per schedulare il suono nel futuro preciso
+        if (time) {
+            temp.start(time);
+        } else {
+            temp.start();
+        }
 
-        // dispose after a short timeout (safe margin based on original duration)
         setTimeout(() => {
             try { temp.stop(); } catch (e) {}
             try { temp.dispose(); } catch (e) {}
@@ -1345,7 +1368,14 @@ function playSampleAtMidi(midi) {
 // Riduci il cooldown globale (dichiaralo in cima se non lo trovi, o modificalo)
 // const playCooldown = 50; // Mettilo a 50ms o anche 30ms invece di 150
 
-function playMidiIfSelected(midi) {
+/* ============================================================
+   MODIFICA 1: Rimuovere il blocco sulle note ripetute
+   e ridurre il cooldown per permettere note veloci
+============================================================ */
+// Riduci il cooldown globale (dichiaralo in cima se non lo trovi, o modificalo)
+// const playCooldown = 50; // Mettilo a 50ms o anche 30ms invece di 150
+
+function playMidiIfSelected(midi, time) {
     if (!midi || typeof midi !== 'number') return;
     
     // Rimuoviamo il controllo "midi === lastPlayedMidi" per permettere
@@ -1393,7 +1423,7 @@ function playMidiIfSelected(midi) {
         if (!samplePlayer || !samplePlayer.buffer) return;
         
         // Qui forziamo il play anche se la nota è la stessa
-        playSampleAtMidi(midi);
+        playSampleAtMidi(midi, time);
         
         lastPlayedMidi = midi;
         lastPlayTime = now;
@@ -1411,7 +1441,7 @@ function playMidiIfSelected(midi) {
 
 // Try to play the requested midi. If that key is not user-selected, find the
 // nearest user-selected key (by midi distance) and play/highlight that instead.
-function triggerPlayWithFallback(requestedMidi) {
+function triggerPlayWithFallback(requestedMidi, time) {
     if (!requestedMidi || typeof requestedMidi !== 'number') return;
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return;
@@ -1425,7 +1455,7 @@ function triggerPlayWithFallback(requestedMidi) {
 
     // if direct exists and is selected, play it
     if (directEl && directEl.classList.contains('selectedKey')) {
-        playMidiIfSelected(requestedMidi);
+        playMidiIfSelected(requestedMidi, time);
         return;
     }
 
@@ -1458,7 +1488,7 @@ function triggerPlayWithFallback(requestedMidi) {
 
             // Otherwise only play if a one-shot sample is loaded (no synth fallback)
             if (!samplePlayer || !samplePlayer.buffer) return;
-            playSampleAtMidi(midi);
+            playSampleAtMidi(midi, time);
             // transient highlight
             nearest.classList.add('playingKey');
             setTimeout(() => { try { nearest.classList.remove('playingKey'); } catch(e){} }, 220);
@@ -1662,7 +1692,7 @@ function attachPreviewMouseTracking() {
 /* ============================================================
    MODIFICA 2: Logica deterministica basata sugli indici originali
 ============================================================ */
-function processMovingDotForIndex(idx) {
+function processMovingDotForIndex(idx, time) {
     try {
         // Se non abbiamo dati o indici mappati, esci
         if (!window.originalDataXs || !window.originalDataXs.length) return;
@@ -1726,7 +1756,7 @@ function processMovingDotForIndex(idx) {
                                     // Usa triggerPlayWithFallback che gestisce la logica 
                                     // "suona solo se selezionato" o "trova il più vicino"
                                     try {
-                                        if (isPlaying) triggerPlayWithFallback(midi);
+                                        if (isPlaying) triggerPlayWithFallback(midi, time);
                                     } catch(e) { /* noop */ }
                                     break;
                                 }
@@ -2494,13 +2524,12 @@ function updateHighlightRender() {
 
 let realHighlightIndex = -1;
 
-function advanceHighlight() {
+function advanceHighlight(time) {
     const len = chartTemp.data.datasets[0].data.length;
     if (!len) return;
 
-    // Se abbiamo la mappatura precisa dei punti originali, usala
+    // --- LOGICA (Calcolo indici) ---
     if (originalPointIndices && originalPointIndices.length > 0) {
-        // Avanza all'indice successivo nell'array dei punti originali
         const prevIndex = currentOriginalPointIndex;
         currentOriginalPointIndex = (currentOriginalPointIndex + 1) % originalPointIndices.length;
         
@@ -2512,7 +2541,6 @@ function advanceHighlight() {
         highlightIndex = originalPointIndices[currentOriginalPointIndex];
         realHighlightIndex = highlightIndex;
     } else {
-        // Fallback: usa il metodo approssimato precedente
         const originalCount = window.originalDataXs ? window.originalDataXs.length : 60;
         const skipPoints = Math.max(1, Math.round(len / originalCount));
         let next = highlightIndex + skipPoints;
@@ -2525,20 +2553,25 @@ function advanceHighlight() {
         realHighlightIndex = next;
     }
     
+    // --- AUDIO (Suona esattamente al 'time' previsto) ---
     currIdxTime = indexToTime(chartTemp, highlightIndex);
     
     if(currIdxTime !== highlightIndexTime) {
         highlightIndexTime = currIdxTime;
-        // process the moving marker: detect original points near it and trigger highlights/notes
-        processMovingDotForIndex(highlightIndex);
+        // Passiamo 'time' alla catena di funzioni che generano il suono
+        processMovingDotForIndex(highlightIndex, time);
         
-        // Aggiorna tutte le knob assegnate con il valore corrente
         if (typeof window.updateAllAssignedKnobs === 'function') {
             window.updateAllAssignedKnobs(highlightIndex);
         }
     }
-    updateHighlightRender();
-    console.log("realHighlightIndex:", realHighlightIndex, "currentOriginalPointIndex:", currentOriginalPointIndex); 
+
+    // --- GRAFICA (Questa parte la avvolgiamo in Tone.Draw per fluidità video) ---
+    Tone.Draw.schedule(() => {
+        updateHighlightRender();
+        // Log solo per debug grafico
+        // console.log("realHighlightIndex:", realHighlightIndex); 
+    }, time);
 }
 
  
@@ -2802,31 +2835,99 @@ if (speedKnobControl) {
     
     // Initial rotation based on current speed
     // Map speed (maxSpeed -> minSpeed) to rotation (-135 -> 135 degrees)
+
     const updateKnobRotation = (speed) => {
-        // Normalize speed to 0-1 range (inverted because lower ms = faster BPM)
         const t = 1 - (speed - minSpeed) / (maxSpeed - minSpeed);
         const angle = -135 + t * 270;
         speedKnobControl.style.transform = `rotate(${angle}deg)`;
     };
 
-    updateKnobRotation(highlightSpeed);
-    const initialBpm = msToBpm(highlightSpeed);
-    if (speedValue) speedValue.textContent = `${initialBpm} BPM`;
-    // Initialize metronome BPM
-    updateMetronomeBPM(initialBpm);
+    // --- NUOVO CODICE: EDITING MANUALE BPM ---
+    if (speedValue) {
+        speedValue.style.cursor = "pointer"; // Indica che è cliccabile
+        speedValue.title = "Doppio click per inserire BPM";
 
-    // Double-click to reset to default (200ms = ~150 BPM)
+        speedValue.addEventListener('dblclick', () => {
+            // 1. Prendi il valore attuale (es. "120" da "120 BPM")
+            const currentText = speedValue.textContent;
+            const currentBpm = parseInt(currentText) || 120;
+
+            // 2. Crea l'input al volo
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.value = currentBpm;
+            
+            // Stile inline per farlo sembrare integrato
+            input.style.width = '50px';
+            input.style.background = 'transparent';
+            input.style.color = '#fbbf24'; // Stesso giallo del testo
+            input.style.border = '1px solid #fbbf24';
+            input.style.borderRadius = '4px';
+            input.style.fontFamily = '"Space Mono", monospace';
+            input.style.fontSize = '11px';
+            input.style.textAlign = 'center';
+            input.style.outline = 'none';
+
+            // 3. Sostituisci il testo con l'input
+            speedValue.textContent = ''; 
+            speedValue.appendChild(input);
+            input.focus();
+            input.select(); // Seleziona tutto il numero per sovrascrittura rapida
+
+            // Funzione per salvare e chiudere
+            const commitBpm = () => {
+                let newVal = parseInt(input.value);
+
+                // Validazione: se non è un numero o è fuori range, usa i limiti
+                if (isNaN(newVal)) newVal = currentBpm;
+                newVal = Math.max(minBpm, Math.min(maxBpm, newVal));
+
+                // Converti in millisecondi (logica inversa di msToBpm)
+                const newMs = bpmToMs(newVal);
+
+                // Aggiorna TUTTO il sistema (velocità, manopola, metronomo)
+                setHighlightSpeed(newMs);
+                updateKnobRotation(newMs); // Ruota la manopola visivamente
+                updateMetronomeBPM(newVal);
+                
+                // Ripristina il testo
+                speedValue.textContent = `${newVal} BPM`;
+            };
+
+            // Salva se premo invio
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    commitBpm();
+                }
+                // Annulla se premo Esc
+                if (e.key === 'Escape') {
+                    speedValue.textContent = `${currentBpm} BPM`;
+                }
+            });
+
+            // Salva se clicco fuori (blur)
+            input.addEventListener('blur', () => {
+                commitBpm(); // Puoi commentare questa riga se preferisci che il blur annulli invece di salvare
+            });
+        });
+    }
+    
+// Double-click to reset to default (120 BPM)
     speedKnobControl.addEventListener('dblclick', (e) => {
-        const defaultSpeed = 200;
+        // 500ms corrisponde esattamente a 120 BPM (60000 / 120 = 500)
+        const defaultSpeed = 500; 
+        
         setHighlightSpeed(defaultSpeed);
         updateKnobRotation(defaultSpeed);
+        
         const bpm = msToBpm(defaultSpeed);
-        if (speedValue) {
-            speedValue.textContent = `${bpm} BPM`;
-            speedValue.classList.add('visible');
-            setTimeout(() => speedValue.classList.remove('visible'), 800);
-        }
+        
+        // Aggiorna subito la scritta sotto la manopola
+        if (speedValue) speedValue.textContent = `${bpm} BPM`;
+        
+        // Aggiorna il metronomo
         updateMetronomeBPM(bpm);
+        
         e.preventDefault();
     });
 
@@ -2838,7 +2939,7 @@ if (speedKnobControl) {
         e.preventDefault();
         
         // Show tooltip
-        if (speedValue) speedValue.classList.add('visible');
+        //if (speedValue) speedValue.classList.add('visible');
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -2872,7 +2973,7 @@ if (speedKnobControl) {
             document.body.style.cursor = 'default';
             
             // Hide tooltip
-            if (speedValue) speedValue.classList.remove('visible');
+            //if (speedValue) speedValue.classList.remove('visible');
         }
     });
 }
@@ -3212,7 +3313,7 @@ function quantizeHighlightToKey() {
             try {
                 if (target.classList.contains('selectedKey')) {
                     const midi = Number(target.dataset.midi);
-                    if (Number.isFinite(midi)) playMidiIfSelected(midi);
+                    if (Number.isFinite(midi)) playMidiIfSelected(midi, time);
                 }
             } catch (e) { console.log("Error triggering quantized play:", e);}
         }

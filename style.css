@@ -1049,29 +1049,24 @@
 }
 
 #speedValue {
-    position: absolute;
-    top: -30px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(15, 23, 42, 0.95);
-    color: #FFFCF0;
-    padding: 4px 8px;
-    border-radius: 4px;
+    position: static; /* Non più fluttuante */
+    transform: none;
+    background: transparent;
+    color: #fbbf24; /* Colore giallo/ambra per risaltare */
+    padding: 2px 0;
     font-family: "Space Mono", monospace;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
+    opacity: 1; /* Sempre visibile */
     white-space: nowrap;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    z-index: 100;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    border: none;
+    box-shadow: none;
+    text-align: center;
+    margin-top: -2px; /* Avvicina un po' al testo BPM */
+    width: 100%;
 }
 
-#speedValue.visible {
-    opacity: 1;
-}
+
 /* 3-position switch styles */
 .chart-switch-container {
     margin-top: 10px;
