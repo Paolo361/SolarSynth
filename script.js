@@ -2991,7 +2991,7 @@ if (speedKnobControl) {
         if (!isDragging) return;
         
         const deltaY = startY - e.clientY; // Up is positive
-        const sensitivity = 2; // Pixels per ms change
+        const sensitivity = 5; // Pixels per ms change
         
         // Calculate new speed
         // Dragging up (positive delta) should decrease ms (faster = higher BPM)
