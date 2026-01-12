@@ -137,24 +137,14 @@
                         </div>
                     </div>
                     
-                    <!-- FFT Spectrum Analyzer with Filter Controls -->
+                    <!-- FFT Spectrum Analyzer with Parametric EQ -->
                     <div class="spectrum-box">
-                        <div class="filter-controls">
+                        <div class="spectrum-header">
                             <div class="filter-title">FILTER</div>
-                            <div class="filter-type-buttons">
-                                <button class="filter-type-btn" data-type="off">OFF</button>
-                                <button class="filter-type-btn" data-type="lowpass">LP</button>
-                                <button class="filter-type-btn" data-type="highpass">HP</button>
-                                <button class="filter-type-btn" data-type="bandpass">BP</button>
-                            </div>
-                            <div class="filter-param">
-                                <label class="filter-param-label">CUTOFF (Hz)</label>
-                                <input type="number" id="filterFreq" min="20" max="20000" value="1000" step="10">
-                            </div>
+                            <button class="effect-toggle" id="eqToggleBtn" data-effect="eq">OFF</button>
                         </div>
                         <div class="spectrum-display">
-                            <canvas id="spectrumCanvas" width="320" height="120"></canvas>
-                            <div class="spectrum-label">SPECTRUM</div>
+                            <canvas id="spectrumCanvas" width="400" height="140"></canvas>
                         </div>
                     </div>
                 </div>

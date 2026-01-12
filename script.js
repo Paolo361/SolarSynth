@@ -302,10 +302,6 @@ let currentMidiNote = null;
 
 // Audio effects chain
 let reverb = null;
-let distortion = null;
-let chorus = null;
-let delay = null;
-let effectsChain = null;
 
 function ensureToneStarted() {
     try {
@@ -401,83 +397,223 @@ function initSpectrum() {
     startSpectrumLoop();
 }
 
-// ========== Filter Controls ==========
-let currentFilterType = 'off';
-let currentFilterFreq = 1000;
+// ========== Parametric EQ (Dual Filter: HighPass + LowPass) ==========
+let eqEnabled = false;
+let eqHighpassFreq = 20;      // Hz - fully open (no attenuation)
+let eqLowpassFreq = 20000;    // Hz - fully open (no attenuation)
+let eqHighpassQ = 0.7071;     // Q value (steepness) for highpass
+let eqLowpassQ = 0.7071;      // Q value (steepness) for lowpass
+let eqHighpassRolloff = -12;  // Rolloff slope for highpass
+let eqLowpassRolloff = -12;   // Rolloff slope for lowpass
+let eqHighpassFilter = null;
+let eqLowpassFilter = null;
+let eqDraggingFilter = null;  // 'hp' or 'lp' - which filter is being dragged
+
+const EQ_MIN_FREQ = 20;
+const EQ_MAX_FREQ = 20000;
+const EQ_MIN_Q = 0.1;         // Minimum Q (gentle slope)
+const EQ_MAX_Q = 20;          // Maximum Q (steep slope)
+const EQ_VALID_ROLLOFFS = [-12, -24, -48, -96]; // Valid rolloff values for Tone.js
 
 function initFilterControls() {
-    // Pulsanti tipo filtro
-    const filterButtons = document.querySelectorAll('.filter-type-btn');
-    filterButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            filterButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+    // Create the dual filter chain (always exists, but might be bypassed)
+    createEQFilters();
+    
+    // EQ toggle button
+    const eqToggleBtn = document.getElementById('eqToggleBtn');
+    if (eqToggleBtn) {
+        eqToggleBtn.addEventListener('click', () => {
+            eqEnabled = !eqEnabled;
+            eqToggleBtn.classList.toggle('active');
+            eqToggleBtn.textContent = eqEnabled ? 'ON' : 'OFF';
             
-            const type = btn.getAttribute('data-type');
-            currentFilterType = type;
-            
-            if (type === 'off') {
-                if (audioFilter) {
-                    // Ricollega il reverb direttamente al masterVolume
-                    if (reverb) {
-                        reverb.disconnect();
-                        reverb.connect(masterVolume);
+            if (eqEnabled) {
+                // Activate EQ: connect filter chain
+                if (eqHighpassFilter && eqLowpassFilter && masterVolume) {
+                    eqHighpassFilter.disconnect();
+                    eqLowpassFilter.disconnect();
+                    eqHighpassFilter.connect(eqLowpassFilter);
+                    eqLowpassFilter.connect(masterVolume);
+                }
+                
+                // Reconnect toneSynth to EQ if it exists
+                if (toneSynth) {
+                    toneSynth.disconnect();
+                    if (eqHighpassFilter) {
+                        toneSynth.connect(eqHighpassFilter);
                     }
-                    audioFilter.disconnect();
-                    audioFilter.dispose();
-                    audioFilter = null;
                 }
             } else {
-                if (!audioFilter) {
-                    // Crea il filtro e inseriscilo tra reverb e masterVolume
-                    audioFilter = new Tone.Filter({
-                        type: type,
-                        frequency: parseFloat(document.getElementById('filterFreq').value),
-                        Q: 1
-                    });
-                    
-                    // Inserisci il filtro nella catena: reverb -> filter -> masterVolume
-                    if (reverb) {
-                        reverb.disconnect();
-                        reverb.connect(audioFilter);
-                    }
-                    audioFilter.connect(masterVolume);
-                } else {
-                    audioFilter.type = type;
+                // Deactivate EQ: bypass filters
+                if (toneSynth && masterVolume) {
+                    toneSynth.disconnect();
+                    toneSynth.connect(masterVolume);
                 }
             }
         });
-    });
+    }
     
-    // Set OFF as default
-    filterButtons[0].classList.add('active');
+    // Canvas mouse events for EQ interaction
+    setupSpectrumCanvasInteraction();
+}
+
+function createEQFilters() {
+    if (!eqHighpassFilter) {
+        eqHighpassFilter = new Tone.Filter({
+            type: 'highpass',
+            frequency: eqHighpassFreq,
+            rolloff: eqHighpassRolloff,
+            Q: eqHighpassQ
+        });
+    }
     
-    // Input numerico frequenza - aggiorna solo quando si conferma
-    const freqInput = document.getElementById('filterFreq');
+    if (!eqLowpassFilter) {
+        eqLowpassFilter = new Tone.Filter({
+            type: 'lowpass',
+            frequency: eqLowpassFreq,
+            rolloff: eqLowpassRolloff,
+            Q: eqLowpassQ
+        });
+    }
+}
+
+function setupSpectrumCanvasInteraction() {
+    const canvas = document.getElementById('spectrumCanvas');
+    if (!canvas) return;
     
-    // Funzione per applicare la frequenza
-    const applyFrequency = () => {
-        let freq = parseFloat(freqInput.value);
-        if (isNaN(freq) || freq < 20) {
-            freq = 20;
-        } else if (freq > 20000) {
-            freq = 20000;
-        }
-        freqInput.value = Math.round(freq);
-        currentFilterFreq = freq;
-        if (audioFilter) audioFilter.frequency.value = freq;
+    const DRAG_THRESHOLD = 10; // pixels - how close to a line to start dragging
+    
+    // Map Hz to canvas X position (logarithmic scale)
+    const hzToPixel = (hz) => {
+        const canvasWidth = canvas.offsetWidth;
+        const log20 = Math.log(20);
+        const log20k = Math.log(20000);
+        const logHz = Math.log(hz);
+        return ((logHz - log20) / (log20k - log20)) * canvasWidth;
     };
     
-    // Applica quando si perde il focus
-    freqInput.addEventListener('blur', applyFrequency);
+    // Map canvas X position to Hz (logarithmic scale)
+    const pixelToHz = (px) => {
+        const canvasWidth = canvas.offsetWidth;
+        const log20 = Math.log(20);
+        const log20k = Math.log(20000);
+        const t = px / canvasWidth;
+        return Math.exp(log20 + t * (log20k - log20));
+    };
     
-    // Applica quando si preme Enter
-    freqInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            applyFrequency();
-            freqInput.blur(); // Rimuovi il focus
+    canvas.addEventListener('mousedown', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        
+        // Get current line positions
+        const hpPixel = hzToPixel(eqHighpassFreq);
+        const lpPixel = hzToPixel(eqLowpassFreq);
+        
+        // Detect which line is being dragged
+        if (Math.abs(mouseX - hpPixel) < DRAG_THRESHOLD) {
+            eqDraggingFilter = 'hp';
+        } else if (Math.abs(mouseX - lpPixel) < DRAG_THRESHOLD) {
+            eqDraggingFilter = 'lp';
         }
     });
+    
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        
+        if (eqDraggingFilter) {
+            // Update frequency based on mouse position
+            const newFreq = Math.max(EQ_MIN_FREQ, Math.min(EQ_MAX_FREQ, pixelToHz(mouseX)));
+            
+            if (eqDraggingFilter === 'hp') {
+                eqHighpassFreq = newFreq;
+                // Always update the filter frequency, even if not active
+                if (eqHighpassFilter) {
+                    eqHighpassFilter.frequency.rampTo(newFreq, 0.05);
+                }
+            } else if (eqDraggingFilter === 'lp') {
+                eqLowpassFreq = newFreq;
+                // Always update the filter frequency, even if not active
+                if (eqLowpassFilter) {
+                    eqLowpassFilter.frequency.rampTo(newFreq, 0.05);
+                }
+            }
+        } else {
+            // Change cursor if near a line
+            const hpPixel = hzToPixel(eqHighpassFreq);
+            const lpPixel = hzToPixel(eqLowpassFreq);
+            const CURSOR_THRESHOLD = 15;
+            
+            if (Math.abs(mouseX - hpPixel) < CURSOR_THRESHOLD || Math.abs(mouseX - lpPixel) < CURSOR_THRESHOLD) {
+                canvas.style.cursor = 'ew-resize';
+            } else {
+                canvas.style.cursor = 'col-resize';
+            }
+        }
+    });
+    
+    document.addEventListener('mouseup', () => {
+        eqDraggingFilter = null;
+    });
+    
+    // Mouse wheel per controllo ripidità (rolloff)
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        
+        // Determina quale filtro modificare in base alla posizione X del mouse
+        const hpPixel = hzToPixel(eqHighpassFreq);
+        const lpPixel = hzToPixel(eqLowpassFreq);
+        const THRESHOLD = 50; // pixels - area di influenza intorno alla linea
+        
+        let targetFilter = null;
+        if (Math.abs(mouseX - hpPixel) < THRESHOLD) {
+            targetFilter = 'hp';
+        } else if (Math.abs(mouseX - lpPixel) < THRESHOLD) {
+            targetFilter = 'lp';
+        }
+        
+        if (targetFilter) {
+            // deltaY negativo = scroll up = aumenta ripidità (es. -12 → -24)
+            // deltaY positivo = scroll down = diminuisce ripidità (es. -24 → -12)
+            
+            if (targetFilter === 'hp') {
+                const currentIndex = EQ_VALID_ROLLOFFS.indexOf(eqHighpassRolloff);
+                let newIndex = currentIndex;
+                
+                if (e.deltaY < 0 && currentIndex < EQ_VALID_ROLLOFFS.length - 1) {
+                    newIndex = currentIndex + 1; // Più ripido
+                } else if (e.deltaY > 0 && currentIndex > 0) {
+                    newIndex = currentIndex - 1; // Meno ripido
+                }
+                
+                if (newIndex !== currentIndex) {
+                    eqHighpassRolloff = EQ_VALID_ROLLOFFS[newIndex];
+                    if (eqHighpassFilter) {
+                        eqHighpassFilter.rolloff = eqHighpassRolloff;
+                    }
+                }
+            } else if (targetFilter === 'lp') {
+                const currentIndex = EQ_VALID_ROLLOFFS.indexOf(eqLowpassRolloff);
+                let newIndex = currentIndex;
+                
+                if (e.deltaY < 0 && currentIndex < EQ_VALID_ROLLOFFS.length - 1) {
+                    newIndex = currentIndex + 1; // Più ripido
+                } else if (e.deltaY > 0 && currentIndex > 0) {
+                    newIndex = currentIndex - 1; // Meno ripido
+                }
+                
+                if (newIndex !== currentIndex) {
+                    eqLowpassRolloff = EQ_VALID_ROLLOFFS[newIndex];
+                    if (eqLowpassFilter) {
+                        eqLowpassFilter.rolloff = eqLowpassRolloff;
+                    }
+                }
+            }
+        }
+    }, { passive: false });
 }
 
 function startSpectrumLoop() {
@@ -494,6 +630,12 @@ function startSpectrumLoop() {
         if (!spectrumCtx || !spectrumCanvas || !fftAnalyser) {
             spectrumAnimationId = null;
             return;
+        }
+        
+        // Aggiorna dimensioni canvas per corrispondere alle dimensioni visuali CSS
+        if (spectrumCanvas.width !== spectrumCanvas.clientWidth || spectrumCanvas.height !== spectrumCanvas.clientHeight) {
+            spectrumCanvas.width = spectrumCanvas.clientWidth;
+            spectrumCanvas.height = spectrumCanvas.clientHeight;
         }
         
         const values = fftAnalyser.getValue();
@@ -597,75 +739,171 @@ function startSpectrumLoop() {
         }
         spectrumCtx.stroke();
         
-        // Disegna griglia di riferimento
-        spectrumCtx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        spectrumCtx.lineWidth = 1;
-        for (let i = 1; i < 4; i++) {
-            const y = (height / 4) * i;
-            spectrumCtx.beginPath();
-            spectrumCtx.moveTo(0, y);
-            spectrumCtx.lineTo(width, y);
-            spectrumCtx.stroke();
-        }
+        // Disegna griglia di frequenze tratteggiata
+        const frequencyMarkings = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const hzToPixelInGrid = (hz) => {
+            const log20 = Math.log(20);
+            const log20k = Math.log(20000);
+            const logHz = Math.log(hz);
+            return ((logHz - log20) / (log20k - log20)) * width;
+        };
         
-        // Disegna la curva del filtro se attivo
-        if (currentFilterType !== 'off') {
-            spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.8)';
-            spectrumCtx.lineWidth = 2;
+        spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.12)';
+        spectrumCtx.lineWidth = 1;
+        spectrumCtx.setLineDash([4, 3]);
+        frequencyMarkings.forEach(freq => {
+            const x = hzToPixelInGrid(freq);
+            spectrumCtx.beginPath();
+            spectrumCtx.moveTo(x, 0);
+            spectrumCtx.lineTo(x, height);
+            spectrumCtx.stroke();
+        });
+        spectrumCtx.setLineDash([]);
+        
+        // Disegna sempre le linee del filtro EQ (anche quando spento)
+        // Funzione helper per convertire Hz a pixel (logaritmica)
+        const hzToPixelInLoop = (hz) => {
+            const log20 = Math.log(20);
+            const log20k = Math.log(20000);
+            const logHz = Math.log(hz);
+            return ((logHz - log20) / (log20k - log20)) * width;
+        };
+        
+        const hpX = hzToPixelInLoop(eqHighpassFreq);
+        const lpX = hzToPixelInLoop(eqLowpassFreq);
+        
+        // Colori dipendenti dallo stato (acceso/spento)
+        const lineOpacity = eqEnabled ? 1 : 0.25;
+        const curveOpacity = eqEnabled ? 0.7 : 0.2;
+        const areaOpacity = eqEnabled ? 0.05 : 0.02;
+        const handleOpacity = eqEnabled ? 1 : 0.3;
+        
+        if (eqEnabled) {
+            // Funzione helper per convertire pixel X a Hz (interpolazione logaritmica)
+            const pixelToHz = (px) => {
+                const t = px / width;
+                const log20 = Math.log(20);
+                const log20k = Math.log(20000);
+                return Math.exp(log20 + t * (log20k - log20));
+            };
+            
+            // Disegna curva di risposta del HighPass (Giallo) - interpolata su ogni pixel
+            spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${curveOpacity})`;
+            spectrumCtx.lineWidth = 3;
             spectrumCtx.beginPath();
             
-            for (let i = 0; i < numBands; i++) {
-                const freq = frequencyBands[i];
-                const x = i * (barWidth + gapWidth) + barWidth / 2;
+            const hpSlopeFactor = Math.abs(eqHighpassRolloff) / 12;
+            let isFirstPoint = true;
+            
+            for (let x = 0; x <= width; x += 2) {
+                const freq = pixelToHz(x);
                 
-                // Calcola la risposta del filtro in base al tipo
-                let response = 0;
-                const ratio = freq / currentFilterFreq;
-                
-                if (currentFilterType === 'lowpass') {
-                    // Slope -12dB/octave approssimato
-                    if (freq < currentFilterFreq) {
-                        response = 1;
-                    } else {
-                        response = Math.max(0, 1 - Math.log2(ratio) * 0.5);
-                    }
-                } else if (currentFilterType === 'highpass') {
-                    // Slope -12dB/octave approssimato
-                    if (freq > currentFilterFreq) {
-                        response = 1;
-                    } else {
-                        response = Math.max(0, 1 - Math.log2(1/ratio) * 0.5);
-                    }
-                } else if (currentFilterType === 'bandpass') {
-                    // Banda passante centrata sulla cutoff
-                    const distance = Math.abs(Math.log2(ratio));
-                    response = Math.max(0, 1 - distance * 0.8);
+                // HighPass response: basse frequenze sono tagliate
+                let response = 1;
+                if (freq < eqHighpassFreq) {
+                    const ratio = freq / eqHighpassFreq;
+                    response = Math.max(0, (Math.log10(ratio) * hpSlopeFactor) + 1);
+                    response = Math.max(0, Math.min(1, response));
                 }
                 
-                const y = height - (response * height * 0.9);
+                const y = height - (response * height * 0.85);
                 
-                if (i === 0) {
+                if (isFirstPoint) {
                     spectrumCtx.moveTo(x, y);
+                    isFirstPoint = false;
                 } else {
                     spectrumCtx.lineTo(x, y);
                 }
             }
-            
             spectrumCtx.stroke();
             
-            // Disegna linea verticale alla frequenza di cutoff
-            const cutoffBandIndex = frequencyBands.findIndex(f => f >= currentFilterFreq);
-            if (cutoffBandIndex !== -1) {
-                const cutoffX = cutoffBandIndex * (barWidth + gapWidth) + barWidth / 2;
-                spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
-                spectrumCtx.lineWidth = 1;
-                spectrumCtx.setLineDash([4, 4]);
-                spectrumCtx.beginPath();
-                spectrumCtx.moveTo(cutoffX, 0);
-                spectrumCtx.lineTo(cutoffX, height);
-                spectrumCtx.stroke();
-                spectrumCtx.setLineDash([]);
+            // Disegna curva di risposta del LowPass (Giallo) - interpolata su ogni pixel
+            spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${curveOpacity})`;
+            spectrumCtx.lineWidth = 3;
+            spectrumCtx.beginPath();
+            
+            const lpSlopeFactor = Math.abs(eqLowpassRolloff) / 12;
+            isFirstPoint = true;
+            
+            for (let x = 0; x <= width; x += 2) {
+                const freq = pixelToHz(x);
+                
+                // LowPass response: alte frequenze sono tagliate
+                let response = 1;
+                if (freq > eqLowpassFreq) {
+                    const ratio = freq / eqLowpassFreq;
+                    response = Math.max(0, 1 - (Math.log10(ratio) * lpSlopeFactor));
+                    response = Math.max(0, Math.min(1, response));
+                }
+                
+                const y = height - (response * height * 0.85);
+                
+                if (isFirstPoint) {
+                    spectrumCtx.moveTo(x, y);
+                    isFirstPoint = false;
+                } else {
+                    spectrumCtx.lineTo(x, y);
+                }
             }
+            spectrumCtx.stroke();
+            
+            // Disegna area oscurata per il HighPass (sinistra)
+            spectrumCtx.fillStyle = `rgba(251, 191, 36, ${areaOpacity})`;
+            spectrumCtx.fillRect(0, 0, hpX, height);
+            
+            // Disegna area oscurata per il LowPass (destra)
+            spectrumCtx.fillStyle = `rgba(251, 191, 36, ${areaOpacity})`;
+            spectrumCtx.fillRect(lpX, 0, width - lpX, height);
+        }
+        
+        // Disegna linea verticale per HighPass (sempre visibile, opacità variabile)
+        spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${lineOpacity})`;
+        spectrumCtx.lineWidth = 2.5;
+        spectrumCtx.setLineDash([6, 5]);
+        spectrumCtx.beginPath();
+        spectrumCtx.moveTo(hpX, 0);
+        spectrumCtx.lineTo(hpX, height);
+        spectrumCtx.stroke();
+        spectrumCtx.setLineDash([]);
+        
+        // Disegna indicatore (handle) su HP line
+        spectrumCtx.fillStyle = `rgba(251, 191, 36, ${handleOpacity})`;
+        spectrumCtx.strokeStyle = `rgba(255, 255, 255, ${handleOpacity * 0.6})`;
+        spectrumCtx.lineWidth = 1.5;
+        spectrumCtx.beginPath();
+        spectrumCtx.arc(hpX, 10, 5, 0, 2 * Math.PI);
+        spectrumCtx.fill();
+        spectrumCtx.stroke();
+        
+        // Disegna linea verticale per LowPass (sempre visibile, opacità variabile)
+        spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${lineOpacity})`;
+        spectrumCtx.lineWidth = 2.5;
+        spectrumCtx.setLineDash([6, 5]);
+        spectrumCtx.beginPath();
+        spectrumCtx.moveTo(lpX, 0);
+        spectrumCtx.lineTo(lpX, height);
+        spectrumCtx.stroke();
+        spectrumCtx.setLineDash([]);
+        
+        // Disegna indicatore (handle) su LP line
+        spectrumCtx.fillStyle = `rgba(251, 191, 36, ${handleOpacity})`;
+        spectrumCtx.strokeStyle = `rgba(255, 255, 255, ${handleOpacity * 0.6})`;
+        spectrumCtx.lineWidth = 1.5;
+        spectrumCtx.beginPath();
+        spectrumCtx.arc(lpX, 10, 5, 0, 2 * Math.PI);
+        spectrumCtx.fill();
+        spectrumCtx.stroke();
+        
+        // Disegna etichette con frequenze in basso SOLO se il filtro è attivo
+        if (eqEnabled) {
+            spectrumCtx.font = 'bold 14px "Space Mono", monospace';
+            spectrumCtx.textAlign = 'center';
+            spectrumCtx.fillStyle = 'rgba(251, 191, 36, 1)';
+            const hpLabel = eqHighpassFreq >= 1000 ? (eqHighpassFreq / 1000).toFixed(1) + 'k' : Math.round(eqHighpassFreq) + '';
+            spectrumCtx.fillText(hpLabel, hpX, height - 2);
+            
+            const lpLabel = eqLowpassFreq >= 1000 ? (eqLowpassFreq / 1000).toFixed(1) + 'k' : Math.round(eqLowpassFreq) + '';
+            spectrumCtx.fillText(lpLabel, lpX, height - 2);
         }
         
         // Disegna etichette di frequenza sull'asse X
@@ -795,7 +1033,6 @@ function initMetronome() {
             }, time);
         }, '2n'); // Every half note (half beat), synced with metronome
         
-        console.log('Metronome and cursor loop initialized on Transport');
     } catch (e) {
         console.warn('Failed to initialize metronome', e);
     }
@@ -805,7 +1042,6 @@ function updateMetronomeBPM(bpm) {
     try {
         if (typeof Tone !== 'undefined' && Tone.Transport) {
             Tone.Transport.bpm.value = bpm;
-            console.log('Metronome BPM updated to', bpm);
         }
     } catch (e) {
         console.warn('Failed to update metronome BPM', e);
@@ -819,10 +1055,9 @@ function updateMetronomeBPM(bpm) {
 // Request MIDI access and populate output devices
 async function initMidiAccess() {
     try {
-        console.log('Requesting MIDI access...');
+        const access = await navigator.requestMIDIAccess();
         // Richiediamo anche sysex: true per massima compatibilità
         const midiAccess = await navigator.requestMIDIAccess({ sysex: true });
-        console.log('MIDI access granted');
         
         const selectEl = document.getElementById('midiOutputSelect');
         const toggleBtn = document.getElementById('midiToggleBtn');
@@ -875,7 +1110,6 @@ async function initMidiAccess() {
         // 2. Ascolta i cambiamenti (Hot-plugging)
         // Se accendi il synth DOPO aver aperto il sito, questo lo rileverà
         midiAccess.onstatechange = (e) => {
-            console.log("MIDI State Change:", e.port.name, e.port.state);
             updateMidiList();
         };
         
@@ -946,7 +1180,6 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
         if (samplePlayer) {
             try {
                 samplePlayer.dispose();
-                console.log('Old sample disposed');
             } catch (e) { /* ignore disposal errors */ }
         }
         
@@ -960,15 +1193,12 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
         // Create a Tone.Player from the decoded buffer
-        samplePlayer = new Tone.Player({ onload: () => {
-            console.log('Player ready');
-        } });
+        samplePlayer = new Tone.Player({ onload: () => {} });
         // Manually set the buffer
         samplePlayer.buffer.set(audioBuffer);
         
         const sampleRootMidi = Number(rootMidi) || 60;
         sampleLoadedName = name || url;
-        console.log('Sample loaded successfully. Name:', name, 'Root MIDI:', sampleRootMidi, 'Buffer channels:', audioBuffer.numberOfChannels, 'Duration:', audioBuffer.duration);
         return true;
     } catch (e) {
         console.warn('Failed to load sample', e);
@@ -1066,8 +1296,6 @@ function playSampleAtMidi(midi) {
         const root = 60; // Fixed root MIDI (C4)
         const semitoneShift = midi - root;
 
-        console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
-
         // Ensure audio context is started
         ensureToneStarted();
 
@@ -1077,9 +1305,9 @@ function playSampleAtMidi(midi) {
         const temp = new Tone.Player(samplePlayer.buffer);
         const cleanup = trackSampleVoice(temp);
         
-        // Route through effects chain if initialized
-        if (effectsChain) {
-            temp.connect(effectsChain);
+        // Connect to EQ filters if enabled, otherwise to masterVolume
+        if (eqEnabled && eqHighpassFilter) {
+            temp.connect(eqHighpassFilter);
         } else {
             temp.connect(masterVolume);
         }
@@ -1699,14 +1927,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateEffectParameter(knobId, value) {
         // Mappa dei knobId ai parametri degli effetti
         const paramMap = {
-            'distortionDriveKnob': () => distortion.distortion = value / 100,
-            'distortionWetKnob': () => distortion.wet.value = value / 100,
-            'chorusFrequencyKnob': () => chorus.frequency.value = (value / 100) * 10,
-            'chorusDelayTimeKnob': () => chorus.delayTime = (value / 100) * 20,
-            'chorusDepthKnob': () => chorus.depth = value / 100,
-            'delayDelayTimeKnob': () => delay.delayTime.value = (value / 100) * 2,
-            'delayFeedbackKnob': () => delay.feedback.value = value / 100,
-            'delayWetKnob': () => delay.wet.value = value / 100,
             'reverbDecayKnob': () => reverb.decay = (value / 100) * 10,
             'reverbWetKnob': () => reverb.wet.value = value / 100,
         };
@@ -1780,8 +2000,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Aggiorna il valore della knob
                 updateKnobFromChart(knobId, chartSource);
-                
-                console.log(`Grafico ${chartSource} assegnato a knob ${knobId}`);
             }
         });
     });
@@ -1873,8 +2091,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 effectParam.classList.remove('assigned-temp', 'assigned-dens', 'assigned-vel');
             }
         }
-        
-        console.log(`Assegnazione rimossa per knob ${knobId}`);
     }
 
     // Aggiungi event listener per click destro su tutte le knob
@@ -1990,8 +2206,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Set effects chain entry point
         effectsChain = delay;
-        
-        console.log('Effects chain initialized: Delay -> Chorus -> Distortion -> Reverb -> Compressor -> Limiter');
     } catch (e) {
         console.error('Failed to initialize effects:', e);
     }
@@ -2058,8 +2272,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (reverb) reverb.preDelay = value * 0.1;
         }, 0, (v) => `${Math.round(v * 100)}%`);
 
-        // Toggle buttons
+        // Toggle buttons (escludi il tasto EQ che è gestito separatamente)
         document.querySelectorAll('.effect-toggle').forEach(toggle => {
+            // Salta il tasto eqToggleBtn poiché è gestito in initFilterControls
+            if (toggle.id === 'eqToggleBtn') return;
+            
             toggle.addEventListener('click', function() {
                 this.classList.toggle('active');
                 const effectName = this.getAttribute('data-effect');
@@ -2231,7 +2448,6 @@ async function updateCharts() {
             }
             originalPointIndices.push(closestIdx);
         }
-        console.log('Original point indices mapped:', originalPointIndices.length, 'points');
 
         chartTemp.update("none");
         chartDens.update("none");
@@ -2245,13 +2461,10 @@ async function updateCharts() {
             window.updateAllAssignedKnobs();
         }
 
-        console.log("realHighlightIndex before adjust:", xSpacing, realHighlightIndex);
         realHighlightIndex = realHighlightIndex - xSpacing - 1;
         highlightIndex = realHighlightIndex;
-        console.log("realHighlightIndex after adjust:", realHighlightIndex);
         advanceHighlight(); // riavanza l'highlight alla nuova posizione
 
-        console.log("maxX, minX, xSpacing, Num:", maxX, minX, xSpacing, NUM);
     } catch (e) {
         console.error("Errore fetching NOAA:", e);
     }
@@ -2982,7 +3195,6 @@ function quantizeHighlightToKey() {
     minValue = getSelectedChartMin();
     if (maxValue === null || minValue === null) return;
     const key = getKeyIndexFromValue(chart.data.datasets[0].data[highlightIndex] ? chart.data.datasets[0].data[highlightIndex].y : 0, maxValue, minValue);
-    console.log("Key index from Y:", key);
 
     // rimuovi solo la classe di quantizzazione precedente (non rimuovere le selezioni utente)
     for (let k = 0; k < keys.length; k++) {
@@ -3000,8 +3212,7 @@ function quantizeHighlightToKey() {
             try {
                 if (target.classList.contains('selectedKey')) {
                     const midi = Number(target.dataset.midi);
-                    console.log("Triggering quantized play for midi:", midi);
-                    if (Number.isFinite(midi) && isPlaying) playMidiIfSelected(midi);
+                    if (Number.isFinite(midi)) playMidiIfSelected(midi);
                 }
             } catch (e) { console.log("Error triggering quantized play:", e);}
         }
