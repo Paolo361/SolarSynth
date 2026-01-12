@@ -281,6 +281,9 @@ let metronomeVolume = null;
 // Recorder variables
 let recorder = null;
 let isRecording = false;
+let recordingStartTime = null;
+let recordingDuration = 0;
+let recordingTimerInterval = null;
 
 // Filter variables
 // Filters temporarily disabled
@@ -1862,6 +1865,252 @@ function setEQEnabled(enabled) {
     console.log(`EQ ${enabled ? 'enabled' : 'disabled'}`);
 }
 
+
+// ============================================================
+// STEP 1: Funzione per inizializzare correttamente il recorder
+// ============================================================
+function initRecorder() {
+    try {
+        // Dispose vecchio recorder se esiste
+        if (recorder) {
+            try { recorder.dispose(); } catch (e) {}
+            recorder = null;
+        }
+        
+        // Crea nuovo recorder con MIME type esplicito
+        // Tone.Recorder supporta: audio/webm, audio/wav (se disponibile)
+        recorder = new Tone.Recorder({
+            mimeType: 'audio/webM' // WebM è universalmente supportato
+            // Nota: 'audio/wav' non è supportato da tutti i browser
+        });
+        
+        // ✅ CONNESSIONE CORRETTA: sorgente → recorder
+        // Connetti dal punto FINALE della catena (prima di Destination)
+        if (mainLimiter) {
+            // Se hai il limiter, connetti da lì
+            mainLimiter.connect(recorder);
+            console.log('✅ Recorder connected to mainLimiter');
+        } else if (mainCompressor) {
+            // Altrimenti dal compressor
+            mainCompressor.connect(recorder);
+            console.log('✅ Recorder connected to mainCompressor');
+        } else if (masterVolume) {
+            // Altrimenti dal volume master
+            masterVolume.connect(recorder);
+            console.log('✅ Recorder connected to masterVolume');
+        } else {
+            console.error('❌ No audio node found to connect recorder');
+            return false;
+        }
+        
+        return true;
+    } catch (e) {
+        console.error('❌ Failed to initialize recorder:', e);
+        return false;
+    }
+}
+
+// ============================================================
+// STEP 2: Funzione per avviare la registrazione
+// ============================================================
+async function startRecording() {
+    try {
+        await ensureToneStarted();
+        
+        // Inizializza recorder
+        if (!initRecorder()) {
+            throw new Error('Failed to initialize recorder');
+        }
+        
+        // Avvia registrazione
+        await recorder.start();
+        
+        isRecording = true;
+        recordingStartTime = Date.now();
+        recordingDuration = 0;
+        
+        // Timer per mostrare durata registrazione (opzionale)
+        recordingTimerInterval = setInterval(() => {
+            recordingDuration = Math.floor((Date.now() - recordingStartTime) / 1000);
+            updateRecordingUI();
+        }, 100);
+        
+        console.log('✅ Recording started');
+        return true;
+        
+    } catch (e) {
+        console.error('❌ Failed to start recording:', e);
+        isRecording = false;
+        return false;
+    }
+}
+
+// ============================================================
+// STEP 3: Funzione per fermare e scaricare la registrazione
+// ============================================================
+async function stopRecording() {
+    try {
+        if (!recorder || !isRecording) {
+            console.warn('No active recording to stop');
+            return false;
+        }
+        
+        // Ferma il timer
+        if (recordingTimerInterval) {
+            clearInterval(recordingTimerInterval);
+            recordingTimerInterval = null;
+        }
+        
+        // Ferma registrazione e ottieni il blob
+        const recording = await recorder.stop();
+        
+        if (!recording || recording.size === 0) {
+            throw new Error('Recording is empty or corrupted');
+        }
+        
+        console.log(`✅ Recording stopped (${recordingDuration}s, ${(recording.size / 1024).toFixed(2)} KB)`);
+        console.log(`📦 MIME type: ${recording.type}`);
+        
+        // Determina estensione corretta dal MIME type
+        let extension = 'webm';
+        if (recording.type.includes('wav')) extension = 'wav';
+        else if (recording.type.includes('ogg')) extension = 'ogg';
+        else if (recording.type.includes('mp3')) extension = 'mp3';
+        
+        // Genera nome file con timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const filename = `sun-synth-${timestamp}.${extension}`;
+        
+        // Crea URL e scarica
+        const url = URL.createObjectURL(recording);
+        const anchor = document.createElement('a');
+        anchor.download = filename;
+        anchor.href = url;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        
+        // Cleanup DOPO un delay (permetti al browser di scaricare)
+        setTimeout(() => {
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+            console.log('✅ Download completed, URL cleaned up');
+        }, 1000);
+        
+        isRecording = false;
+        
+        // Dispose recorder per liberare memoria
+        if (recorder) {
+            try { recorder.dispose(); } catch (e) {}
+            recorder = null;
+        }
+        
+        return true;
+        
+    } catch (e) {
+        console.error('❌ Failed to stop recording:', e);
+        isRecording = false;
+        
+        // Cleanup su errore
+        if (recordingTimerInterval) {
+            clearInterval(recordingTimerInterval);
+            recordingTimerInterval = null;
+        }
+        
+        return false;
+    }
+}
+
+// ============================================================
+// STEP 4: Funzione per aggiornare UI durante registrazione
+// ============================================================
+function updateRecordingUI() {
+    const recordBtn = document.getElementById('recordBtn');
+    if (!recordBtn) return;
+    
+    if (isRecording) {
+        // Mostra durata in tempo reale (opzionale)
+        const minutes = Math.floor(recordingDuration / 60);
+        const seconds = recordingDuration % 60;
+        const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Puoi aggiornare il testo del bottone o un altro elemento
+        // recordBtn.textContent = `⏺ ${timeStr}`;
+        
+        // Animazione pulsante (pulsante rosso lampeggiante)
+        recordBtn.style.animation = 'pulse 1s ease-in-out infinite';
+    } else {
+        recordBtn.style.animation = 'none';
+        // recordBtn.textContent = '⏺ REC';
+    }
+}
+
+// ============================================================
+// STEP 5: Setup bottone registrazione
+// ============================================================
+function setupRecordButton() {
+    const recordBtn = document.getElementById('recordBtn');
+    if (!recordBtn) return;
+    
+    recordBtn.addEventListener('click', async () => {
+        if (!isRecording) {
+            // Avvia registrazione
+            recordBtn.classList.add('recording');
+            const success = await startRecording();
+            
+            if (!success) {
+                recordBtn.classList.remove('recording');
+                alert('Errore durante l\'avvio della registrazione. Verifica la console.');
+            } else {
+                updateRecordingUI();
+            }
+        } else {
+            // Ferma e scarica registrazione
+            recordBtn.classList.remove('recording');
+            const success = await stopRecording();
+            
+            if (!success) {
+                alert('Errore durante il salvataggio della registrazione. Verifica la console.');
+            }
+            
+            updateRecordingUI();
+        }
+    });
+    
+    console.log('✅ Record button setup complete');
+}
+
+// ============================================================
+// STEP 6 (OPZIONALE): Aggiungi CSS per animazione pulsante
+// ============================================================
+const recordButtonStyle = `
+<style>
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+        background: rgba(239, 68, 68, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+        background: rgba(239, 68, 68, 0.4);
+    }
+}
+
+#recordBtn.recording {
+    border-color: #ef4444;
+    color: #ef4444;
+}
+</style>
+`;
+
+// Inserisci lo style nel document head (da fare una sola volta)
+if (!document.getElementById('record-button-style')) {
+    const styleEl = document.createElement('div');
+    styleEl.id = 'record-button-style';
+    styleEl.innerHTML = recordButtonStyle;
+    document.head.appendChild(styleEl);
+}
+
 // Wire select change
 document.addEventListener('DOMContentLoaded', () => {
     const chartBoxes = document.querySelectorAll('.chart-box');
@@ -3087,45 +3336,8 @@ if (metronomeBtn) {
 }
 
 // Record button control
-const recordBtn = document.getElementById('recordBtn');
-if (recordBtn) {
-    recordBtn.addEventListener('click', async () => {
-        await ensureToneStarted();
-        
-        if (!isRecording) {
-            // Start recording
-            try {
-                if (!recorder) {
-                    recorder = new Tone.Recorder();
-                    Tone.Destination.connect(recorder);
-                }
-                recorder.start();
-                isRecording = true;
-                recordBtn.classList.add('recording');
-                console.log('Recording started');
-            } catch (e) {
-                console.error('Failed to start recording:', e);
-            }
-        } else {
-            // Stop recording and download
-            try {
-                const recording = await recorder.stop();
-                const url = URL.createObjectURL(recording);
-                const anchor = document.createElement('a');
-                anchor.download = 'sun-synth-recording.wav';
-                anchor.href = url;
-                anchor.click();
-                URL.revokeObjectURL(url);
-                
-                isRecording = false;
-                recordBtn.classList.remove('recording');
-                console.log('Recording stopped and downloaded');
-            } catch (e) {
-                console.error('Failed to stop recording:', e);
-            }
-        }
-    });
-}
+// Setup record button with proper audio routing
+setupRecordButton();
 
 attachVolumeSlider();
 
