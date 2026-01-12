@@ -779,7 +779,7 @@
 .knob {
     width: 36px;
     height: 36px;
-    background-image: url('knob.png');
+    background-image: url('assets/knob.png');
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
