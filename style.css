@@ -166,6 +166,24 @@
         border: 1px solid #000;
         background: #334155;
         position: relative;
+        transform-origin: center;
+        transition: transform 120ms cubic-bezier(0.4,0,0.2,1), box-shadow 120ms, background-color 120ms;
+        will-change: transform;
+    }
+
+    /* Immediate visual feedback on mouse/touch press */
+    .key:active,
+    .key.pressedKey {
+        transform: scale(0.94);
+    }
+
+    /* Keep existing playing highlight but add a slight shrink for playing effect */
+    .playingKey {
+        background-color: #FFD54A !important; /* vivid warm yellow */
+        box-shadow: 0 0 12px rgba(255,213,74,0.95);
+        outline: 2px solid rgba(255,193,7,1);
+        transform: scale(0.92);
+        transition: transform 120ms cubic-bezier(0.4,0,0.2,1), box-shadow 160ms;
     }
 
     .white {

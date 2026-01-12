@@ -2896,8 +2896,13 @@ function createWhiteKey() {
     // Visual hover: add/remove hoveredKey when mouse enters/leaves
     key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
     key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
+    // Press feedback for mouse and touch (pointer events)
+    key.addEventListener('pointerdown', () => { key.classList.add('pressedKey'); });
+    key.addEventListener('pointerup', () => { key.classList.remove('pressedKey'); });
+    key.addEventListener('pointercancel', () => { key.classList.remove('pressedKey'); });
+    key.addEventListener('pointerleave', () => { key.classList.remove('pressedKey'); });
     return key;
-} 
+}  
 
 function createBlackKey() {
     const key = document.createElement('div');
@@ -2908,8 +2913,13 @@ function createBlackKey() {
     // Visual hover: add/remove hoveredKey when mouse enters/leaves
     key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
     key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
+    // Press feedback for mouse and touch (pointer events)
+    key.addEventListener('pointerdown', () => { key.classList.add('pressedKey'); });
+    key.addEventListener('pointerup', () => { key.classList.remove('pressedKey'); });
+    key.addEventListener('pointercancel', () => { key.classList.remove('pressedKey'); });
+    key.addEventListener('pointerleave', () => { key.classList.remove('pressedKey'); });
     return key;
-} 
+}  
 
 function highlightKey(i) {
     const keyboard = document.getElementById('verticalKeyboard');
