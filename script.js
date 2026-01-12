@@ -1310,7 +1310,8 @@ function createChart(canvasId, color, isPreview = false) {
                 legend: { display: false },
 
                 tooltip: {
-                    enabled: true,
+                    // Enable tooltips only for the preview chart (isPreview === true)
+                    enabled: !!isPreview,
                     mode: 'nearest',
                     intersect: false,
                     backgroundColor: 'rgba(2,6,23,0.85)',
@@ -1323,6 +1324,7 @@ function createChart(canvasId, color, isPreview = false) {
                         label: (ctx) => `${ctx.dataset.label || ''}: ${ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) : '-'}`
                     }
                 },
+
                 // enable our custom plugins with light options
                 lineShadow: { blur: 8, offsetY: 2 },
                 verticalLine: {},
@@ -2136,19 +2138,8 @@ function attachSync(master, slaves) {
         if (!points.length) return;
         const idx = points[0].index;
 
-        // Aggiorna il preview solo se è abilitato a mostrare i punti
-        if (typeof chartPreview !== 'undefined' && chartPreview && chartPreview.options && chartPreview.options.plugins && chartPreview.options.plugins.dataPointLines) {
-            try {
-                chartPreview.setActiveElements([{datasetIndex: 0, index: idx}]);
-                // position event for tooltip - use center x of the element if available
-                const el = chartPreview.getDatasetMeta(0).data[idx] || master.getDatasetMeta(0).data[idx];
-                const pos = el ? {x: el.x, y: el.y} : {x: evt.offsetX, y: evt.offsetY};
-                if (chartPreview.tooltip && typeof chartPreview.tooltip.setActiveElements === 'function') {
-                    chartPreview.tooltip.setActiveElements([{datasetIndex:0, index: idx}], pos);
-                }
-                chartPreview.update('none');
-            } catch (e) { /* noop */ }
-        }
+        // Non sincronizziamo il tooltip del preview quando si passa con il mouse sui mini-chart
+        // (Vogliamo che il preview mostri data/ora solo quando si scorre direttamente sul preview stesso.)
 
         // Non impostiamo active elements sugli altri mini-chart per evitare effetti di hover che mostrano i pallini
     });
