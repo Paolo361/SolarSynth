@@ -366,7 +366,7 @@ function startDbMeterLoop() {
             meterAnimationId = null;
             return;
         }
-        let level = outputMeter.getLevel();
+        let level = outputMeter.getValue();
         if (!Number.isFinite(level)) level = -60;
         const colorLevel = level;
         const clamped = Math.max(-60, Math.min(0, level));
@@ -416,40 +416,16 @@ const EQ_MAX_Q = 20;          // Maximum Q (steep slope)
 const EQ_VALID_ROLLOFFS = [-12, -24, -48, -96]; // Valid rolloff values for Tone.js
 
 function initFilterControls() {
-    // Create the dual filter chain (always exists, but might be bypassed)
     createEQFilters();
     
     // EQ toggle button
     const eqToggleBtn = document.getElementById('eqToggleBtn');
     if (eqToggleBtn) {
         eqToggleBtn.addEventListener('click', () => {
-            eqEnabled = !eqEnabled;
+            // ✅ SOSTITUISCI IL CONTENUTO DEL CLICK CON:
+            setEQEnabled(!eqEnabled);
             eqToggleBtn.classList.toggle('active');
             eqToggleBtn.textContent = eqEnabled ? 'ON' : 'OFF';
-            
-            if (eqEnabled) {
-                // Activate EQ: connect filter chain
-                if (eqHighpassFilter && eqLowpassFilter && masterVolume) {
-                    eqHighpassFilter.disconnect();
-                    eqLowpassFilter.disconnect();
-                    eqHighpassFilter.connect(eqLowpassFilter);
-                    eqLowpassFilter.connect(masterVolume);
-                }
-                
-                // Reconnect toneSynth to EQ if it exists
-                if (toneSynth) {
-                    toneSynth.disconnect();
-                    if (eqHighpassFilter) {
-                        toneSynth.connect(eqHighpassFilter);
-                    }
-                }
-            } else {
-                // Deactivate EQ: bypass filters
-                if (toneSynth && masterVolume) {
-                    toneSynth.disconnect();
-                    toneSynth.connect(masterVolume);
-                }
-            }
         });
     }
     
@@ -1307,53 +1283,54 @@ function trackSampleVoice(player) {
     return cleanup;
 }
 
-function playSampleAtMidi(midi, time) { // Aggiungi parametro time
+function playSampleAtMidi(midi, time) {
     try {
         if (!samplePlayer || !samplePlayer.buffer) {
             console.warn('No sample loaded or buffer missing');
             return false;
         }
-        const root = 60; 
+        
+        // Assicurati che la catena audio sia inizializzata
+        if (!audioRoutingInitialized) {
+            initializeAudioChain();
+        }
+        
+        const root = 60;
         const semitoneShift = midi - root;
-
+        
         console.log('Playing sample at MIDI', midi, 'shift:', semitoneShift, 'semitones');
-
-        // Ensure audio context is started
+        
         ensureToneStarted();
         pruneSampleVoices();
-
+        
         const temp = new Tone.Player(samplePlayer.buffer);
         const cleanup = trackSampleVoice(temp);
         
-        // Connect to EQ filters if enabled, otherwise to masterVolume
-        if (eqEnabled && eqHighpassFilter) {
-            temp.connect(eqHighpassFilter);
-        } else {
-            temp.connect(masterVolume);
-        }
+        // ✅ ROUTING SEMPLICE: Connetti SEMPRE all'input della catena
+        temp.connect(effectsInputNode);
         
-        temp.volume.value = -4; 
+        temp.volume.value = -4;
         
         const playbackRate = Math.pow(2, semitoneShift / 12);
-        if (temp.playbackRate instanceof Tone.Signal || (temp.playbackRate && typeof temp.playbackRate.value !== 'undefined')) {
+        if (temp.playbackRate instanceof Tone.Signal || 
+            (temp.playbackRate && typeof temp.playbackRate.value !== 'undefined')) {
             temp.playbackRate.value = playbackRate;
         } else {
             temp.playbackRate = playbackRate;
         }
         
-        // QUI È IL TRUCCO: Se c'è 'time', usalo per schedulare il suono nel futuro preciso
         if (time) {
             temp.start(time);
         } else {
             temp.start();
         }
-
+        
         setTimeout(() => {
             try { temp.stop(); } catch (e) {}
             try { temp.dispose(); } catch (e) {}
             cleanup();
         }, (samplePlayer.buffer.duration / playbackRate + 0.5) * 1000);
-
+        
         return true;
     } catch (e) {
         console.warn('Sample play failed', e);
@@ -1808,6 +1785,83 @@ function getKeyIndexFromValue(value, maxValue, minValue) {
 
 }
 
+// ============================================================
+// PUNTO 1: NUOVE FUNZIONI PER ROUTING AUDIO
+// ============================================================
+
+// Variabili globali per gestione routing
+let audioRoutingInitialized = false;
+let effectsInputNode = null;
+let effectsOutputNode = null;
+
+// Inizializza la catena audio completa
+function initializeAudioChain() {
+    if (audioRoutingInitialized) return;
+    
+    try {
+        ensureToneStarted();
+        
+        // 1. Crea la catena principale (sempre attiva, wet=0 di default)
+        reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
+        distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
+        chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 });
+        
+        // 2. Crea i filtri EQ (sempre presenti, possono essere bypassati)
+        if (!eqHighpassFilter) {
+            eqHighpassFilter = new Tone.Filter({
+                type: 'highpass',
+                frequency: eqHighpassFreq,
+                rolloff: eqHighpassRolloff,
+                Q: eqHighpassQ
+            });
+        }
+        
+        if (!eqLowpassFilter) {
+            eqLowpassFilter = new Tone.Filter({
+                type: 'lowpass',
+                frequency: eqLowpassFreq,
+                rolloff: eqLowpassRolloff,
+                Q: eqLowpassQ
+            });
+        }
+        
+        // 3. Catena FISSA e COMPLETA (non cambia mai):
+        // Source → Delay → Chorus → Distortion → Reverb → Highpass → Lowpass → Volume → Compressor → Limiter
+        delay.chain(chorus, distortion, reverb, eqHighpassFilter, eqLowpassFilter, masterVolume);
+        
+        // 4. Definisci i nodi di input/output
+        effectsInputNode = delay;      // Tutte le sources si connettono qui
+        effectsOutputNode = masterVolume; // Output finale (già connesso a compressor/limiter)
+        
+        audioRoutingInitialized = true;
+        console.log('✅ Audio chain initialized:');
+        console.log('   Source → Delay → Chorus → Distortion → Reverb → HP Filter → LP Filter → Volume → Destination');
+        
+    } catch (e) {
+        console.error('❌ Failed to initialize audio chain:', e);
+    }
+}
+
+// Abilita/disabilita EQ (agisce solo sui parametri wet, non cambia routing)
+function setEQEnabled(enabled) {
+    eqEnabled = enabled;
+    
+    if (eqHighpassFilter && eqLowpassFilter) {
+        if (enabled) {
+            // Attiva i filtri impostando frequenze normali
+            eqHighpassFilter.frequency.rampTo(eqHighpassFreq, 0.05);
+            eqLowpassFilter.frequency.rampTo(eqLowpassFreq, 0.05);
+        } else {
+            // Disattiva i filtri portando alle frequenze estreme (passano tutto)
+            eqHighpassFilter.frequency.rampTo(20, 0.05);      // Passa tutto sopra 20Hz
+            eqLowpassFilter.frequency.rampTo(20000, 0.05);    // Passa tutto sotto 20kHz
+        }
+    }
+    
+    console.log(`EQ ${enabled ? 'enabled' : 'disabled'}`);
+}
+
 // Wire select change
 document.addEventListener('DOMContentLoaded', () => {
     const chartBoxes = document.querySelectorAll('.chart-box');
@@ -2225,20 +2279,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Initialize audio effects ---
     try {
-        // Ensure compressor/limiter exist first
-        ensureToneStarted();
-        
-        // Create effects chain: Delay -> Chorus -> Distortion -> Reverb -> Volume -> Compressor -> Limiter -> Destination
-        reverb = new Tone.Reverb({ decay: 1.5, wet: 0 }).connect(masterVolume);
-        distortion = new Tone.Distortion({ distortion: 0, wet: 0 }).connect(reverb);
-        chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 }).connect(distortion);
-        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 }).connect(chorus);
-        
-        // Set effects chain entry point
-        effectsChain = delay;
+        initializeAudioChain();
     } catch (e) {
         console.error('Failed to initialize effects:', e);
     }
+    
 
     // --- Effects knob controls ---
     try {
