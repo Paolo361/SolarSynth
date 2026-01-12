@@ -1492,10 +1492,12 @@ function processMovingDotForIndex(idx) {
                                 if (el && el.dataset && Number(el.dataset.midi) === midi) {
                                     el.classList.add('quantizedKey');
                                     
-                                    // SUONA ORA!
+                                    // SUONA ORA SOLO SE LA RIPRODUZIONE È ATTIVA
                                     // Usa triggerPlayWithFallback che gestisce la logica 
                                     // "suona solo se selezionato" o "trova il più vicino"
-                                    triggerPlayWithFallback(midi);
+                                    try {
+                                        if (isPlaying) triggerPlayWithFallback(midi);
+                                    } catch(e) { /* noop */ }
                                     break;
                                 }
                             }
@@ -3008,7 +3010,7 @@ function quantizeHighlightToKey() {
                 if (target.classList.contains('selectedKey')) {
                     const midi = Number(target.dataset.midi);
                     console.log("Triggering quantized play for midi:", midi);
-                    if (Number.isFinite(midi)) playMidiIfSelected(midi);
+                    if (Number.isFinite(midi) && isPlaying) playMidiIfSelected(midi);
                 }
             } catch (e) { console.log("Error triggering quantized play:", e);}
         }
