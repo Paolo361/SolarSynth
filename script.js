@@ -3642,56 +3642,5 @@ if (rootNoteSelectEl) {
     });
 }
 
-// ============================================================
-// AUTO-SCALING SYSTEM - MANTIENE PROPORZIONI FISSE
-// ============================================================
-
-function updateBodyScale() {
-    const body = document.body;
-    
-    // Dimensioni di riferimento (devono corrispondere al CSS)
-    const referenceWidth = 1920;
-    const referenceHeight = 1080;
-    
-    // Dimensioni finestra corrente
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-    
-    // Calcola fattore di scala (mantiene aspect ratio)
-    const scaleX = windowWidth / referenceWidth;
-    const scaleY = windowHeight / referenceHeight;
-    const scale = Math.min(scaleX, scaleY); // Usa il minore per non tagliare
-    
-    // Applica scala
-    body.style.transform = `translate(-50%, -50%) scale(${scale})`;
-    
-    console.log(`🔍 Scale factor: ${(scale * 100).toFixed(1)}%`);
-}
-
-// Aggiorna al caricamento
-updateBodyScale();
-
-// Aggiorna quando la finestra viene ridimensionata
-window.addEventListener('resize', updateBodyScale);
-
-// Previeni zoom tramite Ctrl+Scroll
-document.addEventListener('wheel', (e) => {
-    if (e.ctrlKey) {
-        e.preventDefault();
-    }
-}, { passive: false });
-
-// Previeni zoom tramite gesture su touchpad
-document.addEventListener('gesturestart', (e) => {
-    e.preventDefault();
-});
-
-document.addEventListener('gesturechange', (e) => {
-    e.preventDefault();
-});
-
-document.addEventListener('gestureend', (e) => {
-    e.preventDefault();
-});
 
 // No default sample autoload; remain in "No Sample" state until user picks a preset
