@@ -1,4 +1,7 @@
-    .space-mono-regular {
+    /* ============================================================
+   TYPOGRAPHY - Font definitions
+============================================================ */
+.space-mono-regular {
     font-family: "Space Mono", monospace;
     font-weight: 400;
     font-style: normal;
@@ -22,12 +25,15 @@
     font-style: italic;
     }
 
+/* ============================================================
+   BASE STYLES - Body and main container
+============================================================ */
     body {
         margin: 0;
         padding: 0;
         font-family: Arial;
-        overflow-x: hidden; /* Prevent horizontal scroll */
-        overflow-y: hidden; /* Prevent vertical scroll */
+        overflow-x: hidden; 
+        overflow-y: hidden; 
         background-color: #fff8e7;
     }
 
@@ -44,6 +50,9 @@
         pointer-events: none;
     }
 
+/* ============================================================
+   MAIN CONTAINER - Main box and layers
+============================================================ */
     .main-box {
         width: calc(100% - 40px);
         max-width: none;
@@ -76,6 +85,9 @@
         border-radius: 10px;
     }
 
+/* ============================================================
+   CHARTS - Chart boxes and labels
+============================================================ */
     .top-charts {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -121,7 +133,14 @@
         height: 90px !important;
         border-radius: 6px;
     }
-    /* Controls per l'evidenziazione */
+    
+/* ============================================================
+   CONTROLS - Control panel and knobs
+============================================================ */
+
+/*============================================================
+   CONTROLS - Control panel and interface elements
+============================================================*/
     .controls {
         display: flex;
         align-items: center;
@@ -136,6 +155,10 @@
     }
     .controls input[type="range"] { width: 220px; }
 
+
+/*============================================================
+   KEYBOARD - Musical keyboard interface
+============================================================*/
     .keyboard-box {
         width: 100%;
         background: rgba(15, 23, 42, 0.8);
@@ -160,6 +183,9 @@
         margin-top: 0px;
     }
 
+/* ============================================================
+   KEYBOARD - Musical keyboard interface
+============================================================ */
     .key {
         width: 66px;
         height: 15px;
@@ -171,15 +197,15 @@
         will-change: transform;
     }
 
-    /* Immediate visual feedback on mouse/touch press */
+    
     .key:active,
     .key.pressedKey {
         transform: scale(0.94);
     }
 
-    /* Keep existing playing highlight but add a slight shrink for playing effect */
+    
     .playingKey {
-        background-color: #FFD54A !important; /* vivid warm yellow */
+        background-color: #FFD54A !important; 
         box-shadow: 0 0 12px rgba(255,213,74,0.95);
         outline: 2px solid rgba(255,193,7,1);
         transform: scale(0.92);
@@ -188,13 +214,13 @@
 
     .white {
         width: 66px;
-        height: 10px;
+        height: 10.5px;
         background: #fffaf0;
         border: 1px solid #000;
         box-sizing: border-box;
         display: inline-block;
         position: relative;
-        margin-right: -1px; /* Per evitare spazi tra i tasti */
+        margin-right: -1px; 
     }
 
     .black {
@@ -219,9 +245,9 @@
         outline: 1px solid rgba(251,191,36,0.9);
     }
 
-    /* Highlight used while a note is being played (overrides selected red) */
+    
     .playingKey {
-        background-color: #FFD54A !important; /* vivid warm yellow */
+        background-color: #FFD54A !important; 
         box-shadow: 0 0 12px rgba(255,213,74,0.95);
         outline: 2px solid rgba(255,193,7,1);
     }
@@ -238,16 +264,16 @@
     }
 
     .chart-label {
-    font-family: "Space Mono", monospace;   /* cambia font */
-    font-size: 18px;                  /* ingrandisce */
-    font-weight: bold;               /* opzionale */
+    font-family: "Space Mono", monospace;   
+    font-size: 18px;                  
+    font-weight: bold;               
     }
 
 
 
 .kb-left {
     display: flex;
-    flex-direction: column; /* selettore sopra la tastiera */
+    flex-direction: column; 
     width: auto;
     align-items: center;
 }
@@ -259,10 +285,10 @@
 }
 
 .keyboard-box select#chartSelector {
-    font-family: "Space Mono", monospace; /* same as chart labels */
+    font-family: "Space Mono", monospace; 
     font-weight: 700;
     width: 200px;
-    color: #334155; /* same color as chart labels */
+    color: #334155; 
     background: transparent;
     border: 1px solid rgba(255,255,255,0.06);
     padding: 6px 8px;
@@ -342,12 +368,16 @@
     border-radius: 8px;
     padding: 8px;
     box-sizing: border-box;
-    min-height: 0; /* allow to fit in grid row */
+    min-height: 0; 
     display: flex;
     flex-direction: column;
 }
 
-/* FFT Spectrum Analyzer */
+
+
+/*============================================================
+   SPECTRUM ANALYZER - FFT visualization
+============================================================*/
 .spectrum-box {
     background: rgba(21, 21, 21, 0.6);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -394,6 +424,48 @@
     position: relative;
 }
 
+.filter-drop-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.filter-drop-overlay.active {
+    display: flex;
+}
+
+.filter-drop-zone {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 48px;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.15);
+    text-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+    transition: all 0.2s ease;
+}
+
+.filter-drop-hp {
+    border-right: 2px dashed rgba(59, 130, 246, 0.4);
+    background: linear-gradient(to right, rgba(59, 130, 246, 0.1), transparent);
+}
+
+.filter-drop-lp {
+    background: linear-gradient(to left, rgba(59, 130, 246, 0.1), transparent);
+}
+
+.filter-drop-overlay.active .filter-drop-zone:hover {
+    background: rgba(59, 130, 246, 0.2);
+    color: rgba(255, 255, 255, 0.4);
+}
+
 .spectrum-label {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -411,7 +483,7 @@
     display: block;
 }
 
-/* MODE switch styles */
+
 .mode-switch {
     display: flex;
     gap: 6px;
@@ -434,7 +506,7 @@
 
 .mode-option.active {
     color: #1f2937;
-    background: #fbbf24; /* yellow highlight */
+    background: #fbbf24; 
     border-color: #f59e0b;
     box-shadow: 0 0 12px rgba(251, 191, 36, 0.5);
 }
@@ -496,7 +568,11 @@
     flex: 1;
 }
 
-/* Effects section wrapper */
+
+
+/*============================================================
+   EFFECTS - Audio effects panels and modules
+============================================================*/
 .effects-section {
     width: 100%;
     margin-top: 8px;
@@ -518,11 +594,11 @@
     letter-spacing: 0.5px;
 }
 
-/* Effects Panel Container - bottom dedicated row under charts */
+
 .effects-panel-container {
     display: flex;
     flex-direction: row;
-    justify-content: space-between; /* spread across full width */
+    justify-content: space-between; 
     align-items: stretch;
     gap: 0;
     padding: 0;
@@ -537,7 +613,7 @@
     flex-direction: column;
     align-items: stretch;
     padding: 4px 8px;
-    width: 100%;                /* flex will size them evenly */
+    width: 100%;                
     min-height: 70px;
     box-sizing: border-box;
     position: relative;
@@ -639,7 +715,7 @@
     transition: all 0.3s ease;
 }
 
-/* Colorazione e glow delle label quando un grafico è assegnato */
+
 .effect-param.assigned-temp .param-label {
     color: rgb(239, 68, 68);
     text-shadow: 0 0 10px rgba(239, 68, 68, 0.8),
@@ -687,7 +763,7 @@
     filter: brightness(1.2);
 }
 
-/* keyboard container matches chart height */
+
 #keyboardContainer {
     width: 66px;
     height: 100%;
@@ -702,6 +778,10 @@
     display: flex;
     flex-direction: column;
 }
+
+/*============================================================
+   KNOBS - Rotary knob controls
+============================================================*/
 .knob {
     width: 36px;
     height: 36px;
@@ -715,21 +795,30 @@
     transition: all 0.3s ease;
 }
 
-/* Stile quando si passa sopra una knob durante il drag */
+
 .knob.drag-over {
     filter: brightness(1.3);
     transform: scale(1.1);
     transition: transform 0.2s ease, filter 0.2s ease;
 }
 
-/* Glow per knob disponibile durante il drag */
+
 .knob.glow-available,
 .effect-knob.glow-available {
     filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.9)) drop-shadow(0 0 30px rgba(59, 130, 246, 0.5)) brightness(1.2);
     transition: all 0.2s ease;
 }
 
-/* Glow dimmer per knob già assegnata */
+#spectrumCanvas.glow-available {
+    filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.9)) drop-shadow(0 0 30px rgba(59, 130, 246, 0.5));
+    transition: all 0.2s ease;
+}
+
+#spectrumCanvas.drag-over {
+    filter: drop-shadow(0 0 20px rgba(59, 130, 246, 1)) drop-shadow(0 0 40px rgba(59, 130, 246, 0.7));
+    transition: all 0.1s ease;
+}
+
 .knob.glow-assigned,
 .effect-knob.glow-assigned {
     filter: drop-shadow(0 0 8px rgba(148, 163, 184, 0.5)) brightness(0.9);
@@ -737,7 +826,7 @@
     transition: all 0.2s ease;
 }
 
-/* Stile per i grafici durante il drag */
+
 .chart-box.dragging {
     opacity: 0.5;
     cursor: grabbing;
@@ -763,7 +852,7 @@
     font-weight: bold;
 }
 
-/* Lighter tooltip for volume knob */
+
 #volumeValue {
     font-family: "Space Mono", monospace;
     font-size: 10px;
@@ -838,7 +927,6 @@
     color: transparent;
     font-size: 0;
     text-align: center;
-    margin-left: 10px;
 }
 
 #resetBtn::before {
@@ -865,8 +953,6 @@
     width: 36px;
     height: 36px;
     min-width: unset;
-    padding: 0;
-    border-radius: 0;
     background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
     border: 2px solid #1d4ed8;
     cursor: pointer;
@@ -877,14 +963,12 @@
     align-items: center;
     justify-content: center;
     color: transparent;
-    font-size: 0;
     text-align: center;
-    margin-left: 10px;
 }
 
 #metronomeBtn .metronome-icon {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     filter: brightness(0) invert(1);
     transition: all 0.15s ease;
 }
@@ -1044,25 +1128,25 @@
 }
 
 #speedValue {
-    position: static; /* Non più fluttuante */
+    position: static; 
     transform: none;
     background: transparent;
-    color: #fbbf24; /* Colore giallo/ambra per risaltare */
+    color: #fbbf24; 
     padding: 2px 0;
     font-family: "Space Mono", monospace;
     font-size: 11px;
     font-weight: bold;
-    opacity: 1; /* Sempre visibile */
+    opacity: 1; 
     white-space: nowrap;
     border: none;
     box-shadow: none;
     text-align: center;
-    margin-top: -2px; /* Avvicina un po' al testo BPM */
+    margin-top: -2px; 
     width: 100%;
 }
 
 
-/* 3-position switch styles */
+
 .chart-switch-container {
     margin-top: 10px;
     display: flex;
@@ -1105,7 +1189,7 @@
     color: #fff;
 }
 
-/* Slider background animation */
+
 .switch-slider {
     position: absolute;
     top: 4px;
@@ -1121,26 +1205,26 @@
     box-sizing: border-box;
 }
 
-/* Move slider based on checked input */
+
 #sourceTemp:checked ~ .switch-slider {
     transform: translateX(0);
-    background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%); /* Red for Temp */
+    background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%); 
     border-color: #ef4444;
 }
 
 #sourceDens:checked ~ .switch-slider {
-    transform: translateX(34px); /* 30px width + 4px gap */
-    background: linear-gradient(180deg, #fb923c 0%, #c2410c 100%); /* Orange for Dens */
+    transform: translateX(34px); 
+    background: linear-gradient(180deg, #fb923c 0%, #c2410c 100%); 
     border-color: #fb923c;
 }
 
 #sourceVel:checked ~ .switch-slider {
-    transform: translateX(68px); /* (30px width + 4px gap) * 2 */
-    background: linear-gradient(180deg, #34d399 0%, #059669 100%); /* Green for Vel */
+    transform: translateX(68px); 
+    background: linear-gradient(180deg, #34d399 0%, #059669 100%); 
     border-color: #34d399;
 }
 
-/* Solar Synth Logo */
+
 .sun-synth-logo {
     display: flex;
     align-items: center;
@@ -1167,7 +1251,7 @@
     letter-spacing: 5px;
 }
 
-/* Context Menu Styles */
+
 .context-menu {
     position: fixed;
     background: rgba(15, 23, 42, 0.98);

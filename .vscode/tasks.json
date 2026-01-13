@@ -25,6 +25,12 @@
 			"label": "append_switch_css",
 			"type": "shell",
 			"command": "echo \"/* 3-position switch styles */\n.chart-switch-container {\n    margin-top: 10px;\n    display: flex;\n    justify-content: center;\n}\n\n.chart-switch {\n    position: relative;\n    display: flex;\n    background: #0f172a;\n    border: 1px solid #334155;\n    border-radius: 20px;\n    padding: 4px;\n    gap: 4px;\n    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);\n}\n\n.chart-switch input[type=\\\"radio\\\"] {\n    display: none;\n}\n\n.chart-switch label {\n    position: relative;\n    z-index: 2;\n    width: 30px;\n    height: 30px;\n    display: flex;\n    align-items: center;\n    justify-content: center;\n    border-radius: 50%;\n    cursor: pointer;\n    font-family: \\\"Space Mono\\\", monospace;\n    font-weight: 700;\n    font-size: 14px;\n    color: #64748b;\n    transition: color 0.3s ease;\n}\n\n.chart-switch input[type=\\\"radio\\\"]:checked + label {\n    color: #fff;\n}\n\n/* Slider background animation */\n.switch-slider {\n    position: absolute;\n    top: 4px;\n    left: 4px;\n    width: 30px;\n    height: 30px;\n    background: linear-gradient(180deg, #334155 0%, #1e293b 100%);\n    border-radius: 50%;\n    transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);\n    z-index: 1;\n    box-shadow: 0 2px 4px rgba(0,0,0,0.2);\n    border: 1px solid #475569;\n    box-sizing: border-box;\n}\n\n/* Move slider based on checked input */\n#sourceTemp:checked ~ .switch-slider {\n    transform: translateX(0);\n    background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%); /* Red for Temp */\n    border-color: #ef4444;\n}\n\n#sourceDens:checked ~ .switch-slider {\n    transform: translateX(34px); /* 30px width + 4px gap */\n    background: linear-gradient(180deg, #fb923c 0%, #c2410c 100%); /* Orange for Dens */\n    border-color: #fb923c;\n}\n\n#sourceVel:checked ~ .switch-slider {\n    transform: translateX(68px); /* (30px width + 4px gap) * 2 */\n    background: linear-gradient(180deg, #34d399 0%, #059669 100%); /* Green for Vel */\n    border-color: #34d399;\n}\" >> style.css"
+		},
+		{
+			"label": "Serve local",
+			"type": "shell",
+			"command": "python3 -m http.server 8000",
+			"isBackground": true
 		}
 	]
 }

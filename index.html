@@ -102,8 +102,6 @@
                                     <select id="midiOutputSelect">
                                         <option value="">-- None --</option>
                                     </select>
-                                    <button id="midiToggleBtn" style="padding:12px 10px; font-family: 'Space Mono', monospace; font-size: 18px; width: 100%; display: none;">Enable MIDI</button>
-                                    
                                 </div>
                             </div>
                         </div>
@@ -144,6 +142,10 @@
                         </div>
                         <div class="spectrum-display">
                             <canvas id="spectrumCanvas" width="400" height="140"></canvas>
+                            <div id="filterDropOverlay" class="filter-drop-overlay">
+                                <div class="filter-drop-zone filter-drop-hp">HP</div>
+                                <div class="filter-drop-zone filter-drop-lp">LP</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -283,7 +285,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.39/build/Tone.min.js"></script>
-<script src = "script.js"></script>
+<script type="module" src="js/main.js"></script>
 
 </body>
 </html>
