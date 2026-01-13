@@ -74,7 +74,8 @@ export const horizontalSectionsPlugin = {
 
 export const dataPointLinesPlugin = {
     id: 'dataPointLines',
-    afterDraw(chart, args, options) {
+    // Draw after datasets but before tooltip so the tooltip stays on top
+    afterDatasetsDraw(chart, args, options) {
         const cfg = chart && chart.options && chart.options.plugins && chart.options.plugins.dataPointLines;
         if (!cfg) return;
 
@@ -242,7 +243,7 @@ export function createChart(canvasId, color, isPreview = false) {
                     enabled: !!isPreview,
                     mode: 'nearest',
                     intersect: false,
-                    backgroundColor: 'rgba(2,6,23,0.85)',
+                    backgroundColor: 'rgba(2,6,23,0.78)',
                     titleFont: { family: 'Space Mono, monospace', size: 12, weight: '700' },
                     bodyFont: { family: 'Space Mono, monospace', size: 12 },
                     padding: 10,

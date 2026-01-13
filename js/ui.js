@@ -375,18 +375,30 @@ function setupModeSwitch() {
                 // Disable MIDI when switching to Presets mode
                 if (window.audioModule) {
                     window.audioModule.midiEnabled = false;
+                    // Ensure proxy does not shadow real samplePlayer/sampleLoadedName
+                    delete window.audioModule.samplePlayer;
+                    delete window.audioModule.sampleLoadedName;
                 }
                 const statusEl = document.getElementById('midiStatus');
                 if (statusEl) statusEl.textContent = 'MIDI: inattivo';
+
+                // If no sample loaded, reload the current preset
+                if (window.audioModule && (!window.audioModule.samplePlayer || !window.audioModule.samplePlayer.buffer)) {
+                    const presetSelect = document.getElementById('presetSampleSelect');
+                    const presetName = presetSelect && presetSelect.value ? presetSelect.value : 'halo';
+                    if (window.audioModule.loadPresetSample) {
+                        window.audioModule.loadPresetSample(presetName).catch(e => console.warn('Preset reload failed:', e));
+                    }
+                }
             } else {
                 // Enable MIDI automatically when switching to MIDI mode
                 if (window.audioModule) {
                     window.audioModule.midiEnabled = true;
                 }
-                // Clear sample when switching to MIDI mode
+                // Clear proxy shadow to avoid overriding real sample player
                 if (window.audioModule) {
-                    window.audioModule.samplePlayer = null;
-                    window.audioModule.sampleLoadedName = null;
+                    delete window.audioModule.samplePlayer;
+                    delete window.audioModule.sampleLoadedName;
                 }
                 const status = document.getElementById('sampleStatus');
                 if (status) status.textContent = 'Sample Mode: no sample';
