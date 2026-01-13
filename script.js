@@ -3597,6 +3597,8 @@ function indexToTime(chart, idx) {
 // Disegno al load
 drawVerticalKeyboard();
 
+applyScaleToKeyboard();
+
 // Avviare l'aggiornamento dei grafici ogni 60s (resta manuale l'evidenziazione)
 updateCharts();
 setInterval(updateCharts, 60_000);
