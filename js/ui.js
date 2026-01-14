@@ -198,6 +198,8 @@ export function initUI() {
     const playPauseBtn = document.getElementById('playPauseBtn');
     if (playPauseBtn) {
         playPauseBtn.addEventListener('click', async () => {
+            playPauseBtn.classList.remove('attention-seeker');
+
             if (!isPlaying) {
                 if (typeof Tone !== 'undefined') {
                     await Tone.start();
@@ -271,27 +273,88 @@ export function initUI() {
     if (speedKnobControl) {
         let isDragging = false;
         let startY = 0;
-        let startSpeed = 750;
-        let currentSpeed = startSpeed;
+
+        const defaultBpm = 120;
+        const defaultMs = 500;
         
+        let startSpeed = defaultMs; 
+        let currentSpeed = startSpeed;
+
         const sensitivity = 2;
         const minBpm = 40;
         const maxBpm = 240;
-        
+
         const bpmToMs = (bpm) => Math.round(60000 / bpm);
         const msToBpm = (ms) => Math.round(60000 / ms);
-        
+
         const updateKnobRotation = (speedMs) => {
             const bpm = msToBpm(speedMs);
             const normalized = (bpm - minBpm) / (maxBpm - minBpm);
             const angle = -135 + (normalized * 270);
             speedKnobControl.style.transform = `rotate(${angle}deg)`;
         };
-        
+
         updateKnobRotation(currentSpeed);
         if (speedValue) {
-            const bpm = msToBpm(currentSpeed);
-            speedValue.textContent = `${bpm} BPM`;
+            speedValue.textContent = `${defaultBpm} BPM`;
+            speedValue.title = "Doppio click per modificare";
+            if (typeof Tone !== 'undefined' && Tone.Transport) {
+                Tone.Transport.bpm.value = defaultBpm;
+            }
+        }
+
+        speedKnobControl.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            
+            currentSpeed = defaultMs;
+            updateKnobRotation(defaultMs);
+            if (speedValue) speedValue.textContent = `${defaultBpm} BPM`;
+            if (typeof Tone !== 'undefined' && Tone.Transport) {
+                Tone.Transport.bpm.value = defaultBpm;
+            }
+            
+            console.log('BPM resettati a default:', defaultBpm);
+        });
+
+        if (speedValue) {
+            speedValue.addEventListener('dblclick', () => {
+                const currentText = speedValue.textContent;
+                const currentBpmVal = parseInt(currentText) || defaultBpm;
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.value = currentBpmVal;
+                input.className = 'bpm-input';
+
+                speedValue.textContent = '';
+                speedValue.appendChild(input);
+                input.focus();
+                input.select();
+
+                const commitChange = () => {
+                    let newVal = parseInt(input.value);
+                    if (isNaN(newVal)) newVal = currentBpmVal;
+                    newVal = Math.max(minBpm, Math.min(maxBpm, newVal));
+
+                    const newMs = bpmToMs(newVal);
+                    currentSpeed = newMs;
+                    
+                    updateKnobRotation(newMs);
+                    speedValue.textContent = `${newVal} BPM`;
+
+                    if (typeof Tone !== 'undefined' && Tone.Transport) {
+                        Tone.Transport.bpm.value = newVal;
+                    }
+                };
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') commitChange();
+                    else if (e.key === 'Escape') speedValue.textContent = `${currentBpmVal} BPM`;
+                    e.stopPropagation();
+                });
+
+                input.addEventListener('blur', () => commitChange());
+            });
         }
         
         speedKnobControl.addEventListener('mousedown', (e) => {
@@ -309,7 +372,9 @@ export function initUI() {
             const deltaY = startY - e.clientY;
             const deltaBpm = Math.round(deltaY * sensitivity);
             let newBpm = msToBpm(startSpeed) + deltaBpm;
+            
             newBpm = Math.max(minBpm, Math.min(maxBpm, newBpm));
+            
             const newSpeed = bpmToMs(newBpm);
             
             if (newSpeed !== currentSpeed) {

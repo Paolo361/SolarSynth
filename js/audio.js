@@ -386,7 +386,7 @@ export function initializeAudioChain() {
         reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
-        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 });
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.8 });
         
         if (!eqHighpassFilter) {
             eqHighpassFilter = new Tone.Filter({
@@ -668,7 +668,7 @@ export async function initAudioUI() {
     
     setupEffectKnob('delayMixKnob', (value) => {
         if (delay) delay.wet.value = value;
-    }, 0, (v) => `${Math.round(v * 100)}%`);
+    }, 0.8, (v) => `${Math.round(v * 100)}%`);
 
     setupEffectKnob('reverbDecayKnob', (value) => {
         if (reverb) reverb.decay = 0.1 + value * 9.9;
@@ -701,6 +701,12 @@ export async function initAudioUI() {
             loadPresetSample(presetSelect.value).catch(e => console.warn('Failed to load default preset:', e));
         }
     }
+
+const delayBtn = document.querySelector('[data-effect="delay"]');
+if (delayBtn) {
+    delayBtn.classList.add('active');
+    delayBtn.textContent = 'ON';
+}
     
     console.log('✅ Audio UI initialized');
 }
