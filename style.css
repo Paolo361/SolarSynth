@@ -1356,15 +1356,7 @@ html, body {
     margin-bottom: 40px !important; 
 }
 
-/* 2. AUTO-RESIZE per schermi piccoli (Laptop) */
-/* Questa regola scatta SOLO se l'altezza dello schermo è inferiore a 900px */
-@media screen and (max-height: 900px) {
-    body {
-        /* Questo simula esattamente il tuo "zoom 80%" */
-        /* Funziona su Chrome, Edge e browser moderni */
-        zoom: 0.85; 
-    }
-}
+
 
 /* 3. FLUIDITÀ COLONNA DESTRA */
 /* Evita che la colonna destra rimanga rigida a 490px se non c'è spazio */
