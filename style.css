@@ -342,12 +342,9 @@
     flex-direction: column;
     gap: 8px;
     padding: 8px 0;
-    /*width: 490px;*/
-        width: 40%;       /*Si adatta allo spazio disponibile*/
-        min-width: 380px; 
-        max-width: 500px; 
-        flex-shrink: 0;   
-        
+    width: 40%;       
+    min-width: 380px; 
+    max-width: 500px;     
     flex-shrink: 0;
     align-content: stretch;
     box-sizing: border-box;
@@ -1338,3 +1335,57 @@
     color: #fff;
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
+
+/* --- INIZIO FIX IMPAGINAZIONE --- */
+
+/* 1. SICUREZZA: Sblocca lo scroll ovunque */
+/* Se il contenuto non ci sta, DEVE comparire la barra laterale */
+html, body {
+    overflow-y: auto !important; /* Forza lo scroll verticale */
+    overflow-x: hidden; /* Evita scroll orizzontale inutile */
+    height: auto !important;
+}
+
+.main-box {
+    /* Rimuove il "lucchetto" all'altezza dello schermo */
+    max-height: none !important; 
+    height: auto !important;
+    overflow: visible !important;
+    /* Un po' di spazio sotto per non tagliare l'ultimo pezzo */
+    margin-bottom: 40px !important; 
+}
+
+/* 2. AUTO-RESIZE per schermi piccoli (Laptop) */
+/* Questa regola scatta SOLO se l'altezza dello schermo è inferiore a 900px */
+@media screen and (max-height: 900px) {
+    body {
+        /* Questo simula esattamente il tuo "zoom 80%" */
+        /* Funziona su Chrome, Edge e browser moderni */
+        zoom: 0.85; 
+    }
+}
+
+/* 3. FLUIDITÀ COLONNA DESTRA */
+/* Evita che la colonna destra rimanga rigida a 490px se non c'è spazio */
+.right-section {
+    width: 40% !important;
+    min-width: 380px !important;
+    max-width: 500px !important;
+    flex-basis: auto !important;
+}
+
+/* 4. RIMPICCIOLIMENTO GRAFICI (Opzionale ma utile) */
+/* Se lo schermo è basso, riduce leggermente l'altezza dei grafici per guadagnare spazio */
+@media screen and (max-height: 800px) {
+    .top-charts canvas {
+        height: 70px !important;
+    }
+    .spectrum-box {
+        height: auto !important;
+    }
+    #spectrumCanvas {
+        height: 120px !important;
+    }
+}
+
+/* --- FINE FIX --- */
