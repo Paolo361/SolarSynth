@@ -10,7 +10,9 @@ export let lastPlayTime = 0;
 
 // Import setupEffectKnob from ui module
 import { setupEffectKnob as uiSetupEffectKnob } from './ui.js';
-const setupEffectKnob = uiSetupEffectKnob;export function setLastPlayedMidi(midi) {
+const setupEffectKnob = uiSetupEffectKnob;
+
+export function setLastPlayedMidi(midi) {
     lastPlayedMidi = midi;
 }
 
@@ -103,10 +105,11 @@ export function syncAudioState() {
 }
 
 // Functions for spectrum.js to update EQ from drag/scroll
+// Apply EQ params to filters only when EQ is enabled to avoid bypass states fighting stored values
 export function setEQHighpassFreq(freq) {
     eqHighpassFreq = freq;
     audioState.eqHighpassFreq = freq;
-    if (eqHighpassFilter) {
+    if (eqEnabled && eqHighpassFilter) {
         eqHighpassFilter.frequency.rampTo(freq, 0.05);
     }
 }
@@ -114,7 +117,7 @@ export function setEQHighpassFreq(freq) {
 export function setEQLowpassFreq(freq) {
     eqLowpassFreq = freq;
     audioState.eqLowpassFreq = freq;
-    if (eqLowpassFilter) {
+    if (eqEnabled && eqLowpassFilter) {
         eqLowpassFilter.frequency.rampTo(freq, 0.05);
     }
 }
@@ -122,7 +125,7 @@ export function setEQLowpassFreq(freq) {
 export function setEQHighpassRolloff(rolloff) {
     eqHighpassRolloff = rolloff;
     audioState.eqHighpassRolloff = rolloff;
-    if (eqHighpassFilter) {
+    if (eqEnabled && eqHighpassFilter) {
         eqHighpassFilter.rolloff = rolloff;
     }
 }
@@ -130,7 +133,7 @@ export function setEQHighpassRolloff(rolloff) {
 export function setEQLowpassRolloff(rolloff) {
     eqLowpassRolloff = rolloff;
     audioState.eqLowpassRolloff = rolloff;
-    if (eqLowpassFilter) {
+    if (eqEnabled && eqLowpassFilter) {
         eqLowpassFilter.rolloff = rolloff;
     }
 }
@@ -145,7 +148,8 @@ export function ensureToneStarted() {
                 attack: 0.01,
                 release: 0.1
             }).connect(mainLimiter);
-            masterVolume = new Tone.Volume(0).connect(mainCompressor);
+            // Start muted to avoid pops, real volume restored with a fade when Tone starts
+            masterVolume = new Tone.Volume(-Infinity).connect(mainCompressor);
         }
         if (!outputMeter && masterVolume) {
             outputMeter = new Tone.Meter({ normalRange: false });
@@ -167,6 +171,9 @@ export function ensureToneStarted() {
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             Tone.start();
             toneStarted = true;
+            if (masterVolume) {
+                masterVolume.volume.rampTo(currentVolumeDb, 1.5);
+            }
         }
         if (!metronomeOsc) {
             initMetronome();
@@ -180,7 +187,7 @@ export function setMasterVolume(volumeDb) {
     ensureToneStarted();
     const clamped = Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, volumeDb));
     currentVolumeDb = clamped;
-    if (masterVolume) masterVolume.volume.value = clamped;
+    if (masterVolume) masterVolume.volume.rampTo(clamped, 0.1);
 }
 
 export function initMetronome() {
@@ -391,7 +398,7 @@ export function initializeAudioChain() {
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
         try { chorus.start(); } catch (e) { console.warn('Chorus start failed', e); }
-        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 });
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.5 });
         
         if (!eqHighpassFilter) {
             eqHighpassFilter = new Tone.Filter({
@@ -740,7 +747,7 @@ export async function initAudioUI() {
     
     setupEffectKnob('delayMixKnob', (value) => {
         if (delay) delay.wet.value = value;
-    }, 0, (v) => `${Math.round(v * 100)}%`);
+    }, 0.5, (v) => `${Math.round(v * 100)}%`); // Default 50% wet
 
     // Flush pending delay time on mouseup (stop dragging)
     document.addEventListener('mouseup', flushDelayTimePending);
@@ -761,6 +768,12 @@ export async function initAudioUI() {
     setupEffectToggle('delay');
     setupEffectToggle('reverb');
     setupEffectToggle('eq');
+
+    const delayBtn = document.querySelector('[data-effect="delay"]');
+    if (delayBtn) {
+        delayBtn.classList.add('active');
+        delayBtn.textContent = 'ON';
+    }
     
     // Setup preset sample selector
     const presetSelect = document.getElementById('presetSampleSelect');
