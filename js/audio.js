@@ -185,6 +185,7 @@ export function setMasterVolume(volumeDb) {
     if (masterVolume) masterVolume.volume.rampTo(clamped, 0.1);
 }
 
+
 export function initMetronome() {
     try {
         metronomeVolume = new Tone.Volume(-10).toDestination();
@@ -207,7 +208,7 @@ export function initMetronome() {
                 const position = Tone.Transport.position.split(':');
                 const quarter = parseInt(position[1]);
 
-                if (quarter % 2 === 0) {
+                if (quarter === 0) {
                     metronomeOsc.triggerAttackRelease('G6', '32n', time, 1); 
                 } else {
                     metronomeOsc.triggerAttackRelease('C6', '32n', time, 0.6);
