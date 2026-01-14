@@ -6,6 +6,7 @@ import { initKeyboard, triggerPlayWithFallback } from './keyboard.js';
 import { initMidiUI } from './midi.js';
 import { initRecorderUI } from './recorder.js';
 import { initUI } from './ui.js';
+import { initTutorial } from './tutorial.js';
 import './spectrum.js';
 
 console.log('Moduli caricati con successo');
@@ -22,6 +23,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         await initMidiUI();
         initRecorderUI();
         initUI();
+        initTutorial();
         
         // Export functions and modules to window for Transport callbacks
         window.startTransport = startTransport;

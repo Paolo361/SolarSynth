@@ -250,13 +250,13 @@ let recordingTimerInterval = null;
 
 
 const PRESET_SAMPLES = {
-    afterglow: 'suoni/afterglow.wav',
-    ember: 'suoni/ember.wav',
-    kelvin: 'suoni/kelvin.wav',
-    lumen: 'suoni/lumen.wav',
-    parsec: 'suoni/parsec.wav',
-    photon: 'suoni/photon.wav',
-    halo: 'suoni/halo.wav'
+    afterglow: 'Sounds/afterglow.wav',
+    ember: 'Sounds/ember.wav',
+    kelvin: 'Sounds/kelvin.wav',
+    lumen: 'Sounds/lumen.wav',
+    parsec: 'Sounds/parsec.wav',
+    photon: 'Sounds/photon.wav',
+    halo: 'Sounds/halo.wav'
 };
 
 let midiOutput = null;
