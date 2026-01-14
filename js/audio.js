@@ -38,6 +38,7 @@ export let metronomeVolume = null;
 export let reverb = null;
 export let distortion = null;
 export let chorus = null;
+let chorusStarted = false;
 export let delay = null;
 export let distortionDriveValue = 0;
 export let distortionToneFactor = 1;
@@ -392,7 +393,7 @@ export function initializeAudioChain() {
         reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
-        try { chorus.start(); } catch (e) { console.warn('Chorus start failed', e); }
+        // Defer starting the chorus LFO to ensure we do it only once (see ensureChorusStarted).
         // DELAY: Wet a 0.5 di default
         delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.5 });
         
@@ -656,9 +657,10 @@ function smoothWet(node, target, ramp = 0.05) {
 
 function ensureChorusStarted() {
     try {
-        if (chorus && typeof chorus.start === 'function' && chorus.state !== 'started') {
-            chorus.start();
-        }
+        if (!chorus || typeof chorus.start !== 'function') return;
+        if (chorusStarted) return;
+        chorus.start();
+        chorusStarted = true;
     } catch (e) {
         console.warn('Unable to start chorus LFO', e);
     }
@@ -670,7 +672,8 @@ export async function initAudioUI() {
     syncAudioState();
     
     if (outputMeter) {
-        startDbMeterLoop();
+        console.log('Starting dB meter loop');
+        startDbMeterLoop(outputMeter);
     }
     
     attachVolumeSlider();
