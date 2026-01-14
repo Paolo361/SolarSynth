@@ -11,18 +11,17 @@ export function initRecorder() {
             recorder = null;
         }
         
-        recorder = new Tone.Recorder({
-            mimeType: 'audio/webM'
-        });
-        
-        if (window.mainLimiter) {
-            window.mainLimiter.connect(recorder);
+        recorder = new Tone.Recorder({ mimeType: 'audio/webM' });
+        const audio = window.audioModule;
+
+        if (audio && audio.mainLimiter) {
+            audio.mainLimiter.connect(recorder);
             console.log('Recorder connected to mainLimiter');
-        } else if (window.mainCompressor) {
-            window.mainCompressor.connect(recorder);
+        } else if (audio && audio.mainCompressor) {
+            audio.mainCompressor.connect(recorder);
             console.log('Recorder connected to mainCompressor');
-        } else if (window.masterVolume) {
-            window.masterVolume.connect(recorder);
+        } else if (audio && audio.masterVolume) {
+            audio.masterVolume.connect(recorder);
             console.log('Recorder connected to masterVolume');
         } else {
             console.error('No audio node found to connect recorder');
@@ -38,8 +37,8 @@ export function initRecorder() {
 
 export async function startRecording() {
     try {
-        if (window.ensureToneStarted) {
-            await window.ensureToneStarted();
+        if (window.audioModule && window.audioModule.ensureToneStarted) {
+            await window.audioModule.ensureToneStarted();
         }
         
         if (!initRecorder()) {
@@ -67,6 +66,82 @@ export async function startRecording() {
     }
 }
 
+// Convert AudioBuffer to 16-bit WAV Blob
+function audioBufferToWavBlob(audioBuffer) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    
+    // Get channel data
+    const channels = [];
+    for (let i = 0; i < numChannels; i++) {
+        channels.push(audioBuffer.getChannelData(i));
+    }
+    
+    // Calculate sizes
+    const bytesPerSample = 2; // 16-bit
+    const blockAlign = numChannels * bytesPerSample;
+    const dataSize = length * blockAlign;
+    const fileSize = 36 + dataSize;
+    
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    
+    // Write RIFF header
+    const writeString = (offset, str) => {
+        for (let i = 0; i < str.length; i++) {
+            view.setUint8(offset + i, str.charCodeAt(i));
+        }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, fileSize, true);
+    writeString(8, 'WAVE');
+    
+    // Write fmt chunk
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true); // byte rate
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true); // 16-bit
+    
+    // Write data chunk
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+    
+    // Write audio data
+    let index = 44;
+    const volume = 0.8;
+    for (let i = 0; i < length; i++) {
+        for (let ch = 0; ch < numChannels; ch++) {
+            const sample = Math.max(-1, Math.min(1, channels[ch][i])) * volume;
+            const s16 = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+            view.setInt16(index, s16, true);
+            index += 2;
+        }
+    }
+    
+    console.log(`WAV generated: ${length} samples, ${numChannels} channels, ${fileSize} bytes`);
+    return new Blob([buffer], { type: 'audio/wav' });
+}
+
+async function blobToWavBlob(webmBlob) {
+    try {
+        const arrayBuffer = await webmBlob.arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const wavBlob = audioBufferToWavBlob(audioBuffer);
+        console.log(`✅ Converted WebM (${webmBlob.size} bytes) to WAV (${wavBlob.size} bytes)`);
+        return wavBlob;
+    } catch (e) {
+        console.error('❌ WAV conversion failed:', e);
+        throw e;
+    }
+}
+
 export async function stopRecording() {
     try {
         if (!recorder || !isRecording) {
@@ -86,16 +161,25 @@ export async function stopRecording() {
         }
         
         console.log(`Recording stopped (${recordingDuration}s, ${(recording.size / 1024).toFixed(2)} KB)`);
-        
-        let extension = 'webm';
-        if (recording.type.includes('wav')) extension = 'wav';
-        else if (recording.type.includes('ogg')) extension = 'ogg';
-        else if (recording.type.includes('mp3')) extension = 'mp3';
+        console.log(`Original blob type: ${recording.type}, size: ${recording.size}`);
+
+        // Convert WebM/OGG to WAV
+        let wavBlob;
+        try {
+            wavBlob = await blobToWavBlob(recording);
+            console.log(`✅ Successfully converted to WAV (${wavBlob.size} bytes)`);
+        } catch (convErr) {
+            console.error('❌ WAV conversion failed:', convErr);
+            console.warn('Falling back to original blob');
+            wavBlob = recording;
+        }
         
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-        const filename = `sun-synth-${timestamp}.${extension}`;
+        const filename = `sun-synth-${timestamp}.wav`;
         
-        const url = URL.createObjectURL(recording);
+        console.log(`Downloading as: ${filename} (${wavBlob.size} bytes, type: ${wavBlob.type})`);
+        
+        const url = URL.createObjectURL(wavBlob);
         const anchor = document.createElement('a');
         anchor.download = filename;
         anchor.href = url;
@@ -136,12 +220,9 @@ export function updateRecordingUI() {
     if (!recordBtn) return;
     
     if (isRecording) {
-        const minutes = Math.floor(recordingDuration / 60);
-        const seconds = recordingDuration % 60;
-        const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        recordBtn.textContent = `⏺ ${timeStr}`;
+        recordBtn.classList.add('recording');
     } else {
-        recordBtn.textContent = '⏺';
+        recordBtn.classList.remove('recording');
     }
 }
 
