@@ -45,7 +45,8 @@ The black graph in the bottom right shows audio frequencies.
 * **nb:** Scroll the mouse wheel to increase the slope of the line starting from the cutoff frequency.
 
 ### 6. Drag and Drop
-Drag one of the charts (Temperature, Density, Velocity) onto controls (knobs or EQ) to automate effects based on the data.
+* Drag one of the charts (Temperature, Density, Velocity) onto controls (knobs or EQ) to automate effects based on the data.
+* nb: right click to remove automation
 
 ## Technologies Used
 * **HTML5 / CSS3** (Flexbox & Responsive Design)
