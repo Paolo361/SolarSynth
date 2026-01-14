@@ -166,6 +166,16 @@ export function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatt
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
 
+    // --- NUOVA AGGIUNTA: RESET A ZERO CON DOPPIO CLICK ---
+    knob.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        currentValue = 0; // Forza il valore a 0
+        updateKnobRotation();
+        updateValueDisplay();
+        if (callback) callback(currentValue);
+    });
+    // -----------------------------------------------------
+
     // Add wheel scroll support
     knob.addEventListener('wheel', (e) => {
         e.preventDefault();
@@ -276,7 +286,7 @@ export function initUI() {
 
         const defaultBpm = 120;
         const defaultMs = 500;
-        
+
         let startSpeed = defaultMs; 
         let currentSpeed = startSpeed;
 

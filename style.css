@@ -343,12 +343,19 @@
     gap: 8px;
     padding: 8px 0;
     width: 490px;
+        /* width da sostituire con: 
+        width: 40%;       Si adatta allo spazio disponibile
+        min-width: 380px; Non diventa troppo piccola
+        max-width: 500px; Non diventa troppo grande
+        flex-shrink: 0;   Non schiacciarti se manca spazio
+        */
     flex-shrink: 0;
     align-content: stretch;
     box-sizing: border-box;
     justify-content: center;
     transform: translateY(-5px);
 }
+
 
 .controls-row {
     display: flex;
