@@ -15,6 +15,9 @@
 
 ## User Manual
 
+### 0. StepByStep-Tutorial
+* click the i-icone next to dB bar in the synth's page
+
 ### 1. Main Controls (Top Bar)
 * **PLAY / PAUSE:** Starts or stops playback and chart scrolling.
 * **RESET:** Returns the time cursor to the beginning and stops the sound.
