@@ -1,6 +1,3 @@
-/* ============================================================
-   1) FUNZIONE PER INTERPOLAZIONE
-============================================================ */
 function interpolateLinear(xs, ys, newXs) {
     const out = [];
     for (let i = 0; i < newXs.length; i++) {
@@ -9,26 +6,19 @@ function interpolateLinear(xs, ys, newXs) {
         while (j < xs.length - 2 && x > xs[j + 1]) j++;
         const x0 = xs[j], x1 = xs[j + 1];
         const y0 = ys[j], y1 = ys[j + 1];
-        // Linear interpolation
         const t = (x - x0) / (x1 - x0);
         out.push(y0 * (1 - t) + y1 * t);
     }
     return out;
 }
 
-/* ============================================================
-   2) CREA GRAFICO CON ASSI E TOOLTIPS VISIBILI
-============================================================ */
-// Utility: risolve un colore CSS e restituisce una stringa rgba con alpha
 function resolveColorToRgba(color, alpha = 1) {
-    // use canvas to get a normalized color string
     try {
         const cvs = document.createElement('canvas');
         const ctx = cvs.getContext('2d');
         ctx.fillStyle = color;
-        const resolved = ctx.fillStyle; // e.g. 'rgb(r,g,b)' or '#rrggbb'
+        const resolved = ctx.fillStyle;
 
-        // hex -> rgba
         if (resolved[0] === '#') {
             let hex = resolved.slice(1);
             if (hex.length === 3) hex = hex.split('').map(h => h + h).join('');
@@ -38,26 +28,22 @@ function resolveColorToRgba(color, alpha = 1) {
             return `rgba(${r},${g},${b},${alpha})`;
         }
 
-        // rgb(...) or rgba(...)
         const m = resolved.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9\.]+))?\)/);
         if (m) {
             const r = m[1], g = m[2], b = m[3];
             return `rgba(${r},${g},${b},${alpha})`;
         }
 
-        // fallback: return original color (may be invalid for alpha)
         return color;
     } catch (e) {
         return color;
     }
 }
 
-// Simple map for common named colors (fallbacks if canvas parsing fails)
 const COLOR_MAP = { red: '#ef4444', orange: '#fb923c', green: '#34d399' };
 
-/* Plugin per glow/ombra sotto la linea */
 const lineShadowPlugin = {
-  id: 'lineShadow',
+    id: 'lineShadow',
     beforeDatasetDraw(chart, args, options) {
         const {ctx} = chart;
         const datasetIndex = args.index;
@@ -69,7 +55,6 @@ const lineShadowPlugin = {
         ctx.shadowColor = resolveColorToRgba(base, options.alpha ?? 0.18);
         ctx.shadowBlur = options.blur || 10;
         ctx.shadowOffsetY = options.offsetY || 2;
-        // draw the line path to produce the shadow
         ctx.beginPath();
         meta.data.forEach((el, i) => {
             const p = el.getProps(['x','y'], true);
@@ -82,7 +67,6 @@ const lineShadowPlugin = {
     }
 };
 
-/* Plugin minimal crosshair verticale */
 const verticalLinePlugin = {
   id: 'verticalLine',
   afterDraw(chart) {
@@ -102,46 +86,9 @@ const verticalLinePlugin = {
   }
 };
 
-/* Plugin per disegnare sezioni orizzontali sincronizzate ai tasti */
-const horizontalSectionsPlugin = {
-  id: 'horizontalSections',
-  afterDraw(chart, args, options) {
-    if (!chart.isHorizontalSections) return; // solo per preview chart
-    const ctx = chart.ctx;
-    const keyboard = document.getElementById('verticalKeyboard');
-    if (!keyboard) return;
-    
-    const numKeys = keyboard.children.length;
-    const chartArea = chart.chartArea;
-    const sectionHeight = (chartArea.bottom - chartArea.top) / numKeys;
-    
-    ctx.save();
-    ctx.lineWidth = 0.5;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    // ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    // ctx.font = '10px Space Mono, monospace';
-    // ctx.textAlign = 'right';
-    // ctx.textBaseline = 'middle';
-    
-    // disegna linee orizzontali per ogni sezione
-    for (let i = 0; i <= numKeys; i++) {
-      const y = chartArea.top + i * sectionHeight;
-      ctx.beginPath();
-      ctx.moveTo(chartArea.left, y);
-      ctx.lineTo(chartArea.right, y);
-      ctx.stroke();
-      
-      // disegna indice a sinistra della linea
-    }
-    ctx.restore();
-  }
-};
-
-/* Plugin per disegnare linee verticali ai punti originali del JSON */
 const dataPointLinesPlugin = {
   id: 'dataPointLines',
   afterDraw(chart, args, options) {
-        // respect per-chart enable/disable via options.plugins.dataPointLines
         const cfg = chart && chart.options && chart.options.plugins && chart.options.plugins.dataPointLines;
         if (!cfg) return;
 
@@ -149,13 +96,11 @@ const dataPointLinesPlugin = {
     const meta = chart.getDatasetMeta(0);
     if (!meta || !meta.data || meta.data.length === 0) return;
     
-    // store original data points (xs from updateCharts)
     if (!window.originalDataXs || window.originalDataXs.length === 0) return;
     
     const xs = window.originalDataXs;
     let ys = [];
     
-    // determina i dati Y in base al grafico
     if (chart === chartTemp && window.originalDataTemp) ys = window.originalDataTemp;
     else if (chart === chartDens && window.originalDataDens) ys = window.originalDataDens;
     else if (chart === chartVel && window.originalDataVel) ys = window.originalDataVel;
@@ -166,9 +111,8 @@ const dataPointLinesPlugin = {
     
     ctx.save();
     ctx.lineWidth = 0.8;
-    ctx.strokeStyle = 'rgba(255,193,7,0.05)'; // giallo più opaco
+    ctx.strokeStyle = 'rgba(255,193,7,0.05)';
     
-    // disegna linee verticali per ogni punto originale
     xs.forEach((xTime, idx) => {
       const xPx = scale.getPixelForValue(xTime);
       if (xPx >= chartArea.left && xPx <= chartArea.right) {
@@ -179,7 +123,6 @@ const dataPointLinesPlugin = {
       }
     });
     
-    // Trova il punto più vicino all'highlightIndex corrente
     let closestIdx = -1;
     if (typeof highlightIndex === 'number' && highlightIndex >= 0 && meta.data[highlightIndex]) {
       const highlightXPx = meta.data[highlightIndex].x;
@@ -195,7 +138,6 @@ const dataPointLinesPlugin = {
       });
     }
     
-    // disegna cerchietti sui punti originali
     xs.forEach((xTime, idx) => {
       if (ys && ys[idx] !== undefined) {
         const xPx = scale.getPixelForValue(xTime);
@@ -204,23 +146,21 @@ const dataPointLinesPlugin = {
         if (xPx >= chartArea.left && xPx <= chartArea.right &&
             yPx >= chartArea.top && yPx <= chartArea.bottom) {
           
-          // Se questo è il punto più vicino, evidenzialo in bianco
           const isClosest = idx === closestIdx;
           const radius = isClosest ? 7 : 3.5;
           const fillAlpha = isClosest ? 1 : 0.7;
           const strokeAlpha = isClosest ? 1 : 1;
           
           if (isClosest) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 1)'; // Bianco
+            ctx.fillStyle = 'rgba(255, 255, 255, 1)';
             ctx.strokeStyle = 'rgba(255, 255, 255, 1)';
             ctx.lineWidth = 3;
           } else {
-            ctx.fillStyle = `rgba(255,193,7,${fillAlpha})`; // Giallo
+            ctx.fillStyle = `rgba(255,193,7,${fillAlpha})`;
             ctx.strokeStyle = `rgba(255,193,7,${strokeAlpha})`;
             ctx.lineWidth = 1.5;
           }
           
-          // Aggiungi glow se è il closest
           if (isClosest) {
             ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
             ctx.shadowBlur = 15;
@@ -231,7 +171,6 @@ const dataPointLinesPlugin = {
           ctx.fill();
           ctx.stroke();
           
-          // Reset shadow
           if (isClosest) {
             ctx.shadowColor = 'transparent';
             ctx.shadowBlur = 0;
@@ -244,24 +183,50 @@ const dataPointLinesPlugin = {
   }
 };
 
+const horizontalSectionsPlugin = {
+    id: 'horizontalSections',
+    afterDraw(chart, args, options) {
+        if (!chart.isHorizontalSections) return;
+        const ctx = chart.ctx;
+        const keyboard = document.getElementById('keyboardContainer');
+        if (!keyboard) return;
+        
+        const keys = keyboard.querySelectorAll('.key');
+        const numKeys = keys.length;
+        const chartArea = chart.chartArea;
+        const sectionHeight = (chartArea.bottom - chartArea.top) / numKeys;
+        
+        ctx.save();
+        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        
+        for (let i = 0; i <= numKeys; i++) {
+            const y = chartArea.top + i * sectionHeight;
+            ctx.beginPath();
+            ctx.moveTo(chartArea.left, y);
+            ctx.lineTo(chartArea.right, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+};
+
 Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, dataPointLinesPlugin);
 
-// --- Tone.js synth setup ---
 let toneSynth = null;
 let fftAnalyser = null;
 let spectrumCanvas = null;
 let spectrumCtx = null;
 let spectrumAnimationId = null;
-let spectrumBands = []; // Array per smooth decay
-let audioFilter = null; // Filtro audio
+let spectrumBands = [];
+let audioFilter = null;
 let mainLimiter = null;
 let mainCompressor = null;
 let masterVolume = null;
 let toneStarted = false;
 let lastPlayedMidi = null;
 let lastPlayTime = 0;
-const playCooldown = 150; // ms between retriggers of same note
-// Optional sample player for oneshot sample mapping
+const playCooldown = 150;
 let samplePlayer = null;
 let sampleLoadedName = null;
 const MAX_POLYPHONY = 8;
@@ -272,21 +237,17 @@ const VOLUME_MIN = -40;
 const VOLUME_MAX = 6;
 let currentVolumeDb = 0;
 const SNAP_THRESHOLD = 0.3;
-// Metronome variables
 let metronomeEnabled = false;
 let metronomeOsc = null;
 let metronomePanner = null;
 let metronomeVolume = null;
 
-// Recorder variables
 let recorder = null;
 let isRecording = false;
 let recordingStartTime = null;
 let recordingDuration = 0;
 let recordingTimerInterval = null;
 
-// Filter variables
-// Filters temporarily disabled
 
 const PRESET_SAMPLES = {
     afterglow: 'suoni/afterglow.wav',
@@ -298,18 +259,18 @@ const PRESET_SAMPLES = {
     halo: 'suoni/halo.wav'
 };
 
-// MIDI Output variables
 let midiOutput = null;
 let midiEnabled = false;
 let currentMidiNote = null;
 
-// Audio effects chain
 let reverb = null;
+let distortion = null;
+let chorus = null;
+let delay = null;
 
 function ensureToneStarted() {
     try {
         if (!mainLimiter) {
-            // Chain: Volume -> Compressor -> Limiter -> Destination
             mainLimiter = new Tone.Limiter(-2).toDestination();
             mainCompressor = new Tone.Compressor({
                 threshold: -20,
@@ -326,7 +287,6 @@ function ensureToneStarted() {
         }
         if (!toneSynth) toneSynth = new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterVolume);
         
-        // Initialize FFT Analyser
         if (!fftAnalyser && masterVolume) {
             fftAnalyser = new Tone.FFT(512);
             masterVolume.connect(fftAnalyser);
@@ -334,11 +294,9 @@ function ensureToneStarted() {
         }
         
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
-            // Tone.start() must be called in a user gesture; try to start silently if possible
             Tone.start();
             toneStarted = true;
         }
-        // Initialize metronome if not already done
         if (!metronomeOsc) {
             initMetronome();
         }
@@ -362,7 +320,7 @@ function updateDbReadout(volumeDb) {
 }
 
 function startDbMeterLoop() {
-    if (meterAnimationId) return; // already running
+    if (meterAnimationId) return;
     const loop = () => {
         const fill = document.getElementById('dbMeterFill');
         if (!fill || !outputMeter) {
@@ -384,55 +342,48 @@ function startDbMeterLoop() {
     meterAnimationId = requestAnimationFrame(loop);
 }
 
-// ========== FFT Spectrum Visualizer (Equalizer Style) ==========
 function initSpectrum() {
     spectrumCanvas = document.getElementById('spectrumCanvas');
     if (!spectrumCanvas) return;
     spectrumCtx = spectrumCanvas.getContext('2d');
     
-    // Inizializza le bande con valori zero
-    const numBands = 32; // Numero di bande dell'equalizzatore
+    const numBands = 32;
     spectrumBands = new Array(numBands).fill(0);
     
-    // Inizializza i controlli del filtro
     initFilterControls();
     
     startSpectrumLoop();
 }
 
-// ========== Parametric EQ (Dual Filter: HighPass + LowPass) ==========
 let eqEnabled = false;
-let eqHighpassFreq = 20;      // Hz - fully open (no attenuation)
-let eqLowpassFreq = 20000;    // Hz - fully open (no attenuation)
-let eqHighpassQ = 0.7071;     // Q value (steepness) for highpass
-let eqLowpassQ = 0.7071;      // Q value (steepness) for lowpass
-let eqHighpassRolloff = -12;  // Rolloff slope for highpass
-let eqLowpassRolloff = -12;   // Rolloff slope for lowpass
+let eqHighpassFreq = 20;
+let eqLowpassFreq = 20000;
+let eqHighpassQ = 0.7071;
+let eqLowpassQ = 0.7071;
+let eqHighpassRolloff = -12;
+let eqLowpassRolloff = -12;
 let eqHighpassFilter = null;
 let eqLowpassFilter = null;
-let eqDraggingFilter = null;  // 'hp' or 'lp' - which filter is being dragged
+let eqDraggingFilter = null;
 
 const EQ_MIN_FREQ = 20;
 const EQ_MAX_FREQ = 20000;
-const EQ_MIN_Q = 0.1;         // Minimum Q (gentle slope)
-const EQ_MAX_Q = 20;          // Maximum Q (steep slope)
-const EQ_VALID_ROLLOFFS = [-12, -24, -48, -96]; // Valid rolloff values for Tone.js
+const EQ_MIN_Q = 0.1;
+const EQ_MAX_Q = 20;
+const EQ_VALID_ROLLOFFS = [-12, -24, -48, -96];
 
 function initFilterControls() {
     createEQFilters();
     
-    // EQ toggle button
     const eqToggleBtn = document.getElementById('eqToggleBtn');
     if (eqToggleBtn) {
         eqToggleBtn.addEventListener('click', () => {
-            // ✅ SOSTITUISCI IL CONTENUTO DEL CLICK CON:
             setEQEnabled(!eqEnabled);
             eqToggleBtn.classList.toggle('active');
             eqToggleBtn.textContent = eqEnabled ? 'ON' : 'OFF';
         });
     }
     
-    // Canvas mouse events for EQ interaction
     setupSpectrumCanvasInteraction();
 }
 
@@ -460,9 +411,8 @@ function setupSpectrumCanvasInteraction() {
     const canvas = document.getElementById('spectrumCanvas');
     if (!canvas) return;
     
-    const DRAG_THRESHOLD = 10; // pixels - how close to a line to start dragging
+    const DRAG_THRESHOLD = 10;
     
-    // Map Hz to canvas X position (logarithmic scale)
     const hzToPixel = (hz) => {
         const canvasWidth = canvas.offsetWidth;
         const log20 = Math.log(20);
@@ -471,7 +421,6 @@ function setupSpectrumCanvasInteraction() {
         return ((logHz - log20) / (log20k - log20)) * canvasWidth;
     };
     
-    // Map canvas X position to Hz (logarithmic scale)
     const pixelToHz = (px) => {
         const canvasWidth = canvas.offsetWidth;
         const log20 = Math.log(20);
@@ -484,11 +433,9 @@ function setupSpectrumCanvasInteraction() {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         
-        // Get current line positions
         const hpPixel = hzToPixel(eqHighpassFreq);
         const lpPixel = hzToPixel(eqLowpassFreq);
         
-        // Detect which line is being dragged
         if (Math.abs(mouseX - hpPixel) < DRAG_THRESHOLD) {
             eqDraggingFilter = 'hp';
         } else if (Math.abs(mouseX - lpPixel) < DRAG_THRESHOLD) {
@@ -501,24 +448,20 @@ function setupSpectrumCanvasInteraction() {
         const mouseX = e.clientX - rect.left;
         
         if (eqDraggingFilter) {
-            // Update frequency based on mouse position
             const newFreq = Math.max(EQ_MIN_FREQ, Math.min(EQ_MAX_FREQ, pixelToHz(mouseX)));
             
             if (eqDraggingFilter === 'hp') {
                 eqHighpassFreq = newFreq;
-                // Always update the filter frequency, even if not active
                 if (eqHighpassFilter) {
                     eqHighpassFilter.frequency.rampTo(newFreq, 0.05);
                 }
             } else if (eqDraggingFilter === 'lp') {
                 eqLowpassFreq = newFreq;
-                // Always update the filter frequency, even if not active
                 if (eqLowpassFilter) {
                     eqLowpassFilter.frequency.rampTo(newFreq, 0.05);
                 }
             }
         } else {
-            // Change cursor if near a line
             const hpPixel = hzToPixel(eqHighpassFreq);
             const lpPixel = hzToPixel(eqLowpassFreq);
             const CURSOR_THRESHOLD = 15;
@@ -535,17 +478,15 @@ function setupSpectrumCanvasInteraction() {
         eqDraggingFilter = null;
     });
     
-    // Mouse wheel per controllo ripidità (rolloff)
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         
-        // Determina quale filtro modificare in base alla posizione X del mouse
         const hpPixel = hzToPixel(eqHighpassFreq);
         const lpPixel = hzToPixel(eqLowpassFreq);
-        const THRESHOLD = 50; // pixels - area di influenza intorno alla linea
+        const THRESHOLD = 50;
         
         let targetFilter = null;
         if (Math.abs(mouseX - hpPixel) < THRESHOLD) {
@@ -555,17 +496,15 @@ function setupSpectrumCanvasInteraction() {
         }
         
         if (targetFilter) {
-            // deltaY negativo = scroll up = aumenta ripidità (es. -12 → -24)
-            // deltaY positivo = scroll down = diminuisce ripidità (es. -24 → -12)
             
             if (targetFilter === 'hp') {
                 const currentIndex = EQ_VALID_ROLLOFFS.indexOf(eqHighpassRolloff);
                 let newIndex = currentIndex;
                 
                 if (e.deltaY < 0 && currentIndex < EQ_VALID_ROLLOFFS.length - 1) {
-                    newIndex = currentIndex + 1; // Più ripido
+                    newIndex = currentIndex + 1;
                 } else if (e.deltaY > 0 && currentIndex > 0) {
-                    newIndex = currentIndex - 1; // Meno ripido
+                    newIndex = currentIndex - 1;
                 }
                 
                 if (newIndex !== currentIndex) {
@@ -579,9 +518,9 @@ function setupSpectrumCanvasInteraction() {
                 let newIndex = currentIndex;
                 
                 if (e.deltaY < 0 && currentIndex < EQ_VALID_ROLLOFFS.length - 1) {
-                    newIndex = currentIndex + 1; // Più ripido
+                    newIndex = currentIndex + 1;
                 } else if (e.deltaY > 0 && currentIndex > 0) {
-                    newIndex = currentIndex - 1; // Meno ripido
+                    newIndex = currentIndex - 1;
                 }
                 
                 if (newIndex !== currentIndex) {
@@ -596,9 +535,8 @@ function setupSpectrumCanvasInteraction() {
 }
 
 function startSpectrumLoop() {
-    if (spectrumAnimationId) return; // already running
+    if (spectrumAnimationId) return;
     
-    // Definisci le bande di frequenza (Hz) in scala logaritmica
     const frequencyBands = [
         20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400,
         500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000,
@@ -611,7 +549,6 @@ function startSpectrumLoop() {
             return;
         }
         
-        // Aggiorna dimensioni canvas per corrispondere alle dimensioni visuali CSS
         if (spectrumCanvas.width !== spectrumCanvas.clientWidth || spectrumCanvas.height !== spectrumCanvas.clientHeight) {
             spectrumCanvas.width = spectrumCanvas.clientWidth;
             spectrumCanvas.height = spectrumCanvas.clientHeight;
@@ -620,29 +557,24 @@ function startSpectrumLoop() {
         const values = fftAnalyser.getValue();
         const width = spectrumCanvas.width;
         const height = spectrumCanvas.height;
-        const sampleRate = 44100; // Assuming standard sample rate
+        const sampleRate = 44100;
         const nyquist = sampleRate / 2;
         
-        // Clear canvas con sfondo scuro
         spectrumCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
         spectrumCtx.fillRect(0, 0, width, height);
         
-        // Calcola larghezza barra e gap
         const numBands = spectrumBands.length;
         const totalGap = numBands - 1;
         const gapWidth = 2;
         const barWidth = (width - totalGap * gapWidth) / numBands;
         
-        // Raggruppa i bin FFT in bande logaritmiche e calcola i valori
         for (let i = 0; i < numBands; i++) {
             const freqStart = i === 0 ? 20 : frequencyBands[i - 1];
             const freqEnd = i < frequencyBands.length ? frequencyBands[i] : nyquist;
             
-            // Trova i bin corrispondenti a questa banda
             const binStart = Math.floor((freqStart / nyquist) * values.length);
             const binEnd = Math.ceil((freqEnd / nyquist) * values.length);
             
-            // Calcola il valore medio (in dB) per questa banda
             let sum = 0;
             let count = 0;
             for (let j = binStart; j < binEnd && j < values.length; j++) {
@@ -651,20 +583,16 @@ function startSpectrumLoop() {
             }
             const avgDb = count > 0 ? sum / count : -100;
             
-            // Normalizza da dB (-100 a 0) a range 0-1
             const normalizedValue = Math.max(0, Math.min(1, (avgDb + 100) / 100));
             
-            // Smooth decay: interpola verso il nuovo valore
-            const smoothFactor = 0.3; // Più basso = più fluido
+            const smoothFactor = 0.3;
             spectrumBands[i] = spectrumBands[i] * (1 - smoothFactor) + normalizedValue * smoothFactor;
             
-            // Applica decay se il segnale diminuisce
             if (normalizedValue < spectrumBands[i]) {
-                spectrumBands[i] *= 0.85; // Decay rate
+                spectrumBands[i] *= 0.85;
             }
         }
         
-        // Disegna area riempita (filled)
         const gradient = spectrumCtx.createLinearGradient(0, height, 0, 0);
         gradient.addColorStop(0, '#34d399');
         gradient.addColorStop(0.5, '#fbbf24');
@@ -674,7 +602,6 @@ function startSpectrumLoop() {
         spectrumCtx.beginPath();
         spectrumCtx.moveTo(0, height);
         
-        // Disegna il contorno superiore dell'area
         for (let i = 0; i < numBands; i++) {
             const barHeight = spectrumBands[i] * height;
             const x = i * (barWidth + gapWidth) + barWidth / 2;
@@ -683,7 +610,6 @@ function startSpectrumLoop() {
             if (i === 0) {
                 spectrumCtx.lineTo(x, y);
             } else {
-                // Interpolazione smooth tra i punti
                 const prevX = (i - 1) * (barWidth + gapWidth) + barWidth / 2;
                 const prevY = height - spectrumBands[i - 1] * height;
                 const cpX1 = prevX + (x - prevX) / 2;
@@ -692,12 +618,10 @@ function startSpectrumLoop() {
             }
         }
         
-        // Chiudi il percorso
         spectrumCtx.lineTo(width, height);
         spectrumCtx.closePath();
         spectrumCtx.fill();
         
-        // Aggiungi linea di contorno
         spectrumCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         spectrumCtx.lineWidth = 2;
         spectrumCtx.beginPath();
@@ -718,7 +642,6 @@ function startSpectrumLoop() {
         }
         spectrumCtx.stroke();
         
-        // Disegna griglia di frequenze tratteggiata
         const frequencyMarkings = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
         const hzToPixelInGrid = (hz) => {
             const log20 = Math.log(20);
@@ -739,8 +662,6 @@ function startSpectrumLoop() {
         });
         spectrumCtx.setLineDash([]);
         
-        // Disegna sempre le linee del filtro EQ (anche quando spento)
-        // Funzione helper per convertire Hz a pixel (logaritmica)
         const hzToPixelInLoop = (hz) => {
             const log20 = Math.log(20);
             const log20k = Math.log(20000);
@@ -751,14 +672,12 @@ function startSpectrumLoop() {
         const hpX = hzToPixelInLoop(eqHighpassFreq);
         const lpX = hzToPixelInLoop(eqLowpassFreq);
         
-        // Colori dipendenti dallo stato (acceso/spento)
         const lineOpacity = eqEnabled ? 1 : 0.25;
         const curveOpacity = eqEnabled ? 0.7 : 0.2;
         const areaOpacity = eqEnabled ? 0.05 : 0.02;
         const handleOpacity = eqEnabled ? 1 : 0.3;
         
         if (eqEnabled) {
-            // Funzione helper per convertire pixel X a Hz (interpolazione logaritmica)
             const pixelToHz = (px) => {
                 const t = px / width;
                 const log20 = Math.log(20);
@@ -766,7 +685,6 @@ function startSpectrumLoop() {
                 return Math.exp(log20 + t * (log20k - log20));
             };
             
-            // Disegna curva di risposta del HighPass (Giallo) - interpolata su ogni pixel
             spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${curveOpacity})`;
             spectrumCtx.lineWidth = 3;
             spectrumCtx.beginPath();
@@ -777,7 +695,6 @@ function startSpectrumLoop() {
             for (let x = 0; x <= width; x += 2) {
                 const freq = pixelToHz(x);
                 
-                // HighPass response: basse frequenze sono tagliate
                 let response = 1;
                 if (freq < eqHighpassFreq) {
                     const ratio = freq / eqHighpassFreq;
@@ -796,7 +713,6 @@ function startSpectrumLoop() {
             }
             spectrumCtx.stroke();
             
-            // Disegna curva di risposta del LowPass (Giallo) - interpolata su ogni pixel
             spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${curveOpacity})`;
             spectrumCtx.lineWidth = 3;
             spectrumCtx.beginPath();
@@ -807,7 +723,6 @@ function startSpectrumLoop() {
             for (let x = 0; x <= width; x += 2) {
                 const freq = pixelToHz(x);
                 
-                // LowPass response: alte frequenze sono tagliate
                 let response = 1;
                 if (freq > eqLowpassFreq) {
                     const ratio = freq / eqLowpassFreq;
@@ -826,16 +741,13 @@ function startSpectrumLoop() {
             }
             spectrumCtx.stroke();
             
-            // Disegna area oscurata per il HighPass (sinistra)
             spectrumCtx.fillStyle = `rgba(251, 191, 36, ${areaOpacity})`;
             spectrumCtx.fillRect(0, 0, hpX, height);
             
-            // Disegna area oscurata per il LowPass (destra)
             spectrumCtx.fillStyle = `rgba(251, 191, 36, ${areaOpacity})`;
             spectrumCtx.fillRect(lpX, 0, width - lpX, height);
         }
         
-        // Disegna linea verticale per HighPass (sempre visibile, opacità variabile)
         spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${lineOpacity})`;
         spectrumCtx.lineWidth = 2.5;
         spectrumCtx.setLineDash([6, 5]);
@@ -845,7 +757,6 @@ function startSpectrumLoop() {
         spectrumCtx.stroke();
         spectrumCtx.setLineDash([]);
         
-        // Disegna indicatore (handle) su HP line
         spectrumCtx.fillStyle = `rgba(251, 191, 36, ${handleOpacity})`;
         spectrumCtx.strokeStyle = `rgba(255, 255, 255, ${handleOpacity * 0.6})`;
         spectrumCtx.lineWidth = 1.5;
@@ -854,7 +765,6 @@ function startSpectrumLoop() {
         spectrumCtx.fill();
         spectrumCtx.stroke();
         
-        // Disegna linea verticale per LowPass (sempre visibile, opacità variabile)
         spectrumCtx.strokeStyle = `rgba(251, 191, 36, ${lineOpacity})`;
         spectrumCtx.lineWidth = 2.5;
         spectrumCtx.setLineDash([6, 5]);
@@ -864,7 +774,6 @@ function startSpectrumLoop() {
         spectrumCtx.stroke();
         spectrumCtx.setLineDash([]);
         
-        // Disegna indicatore (handle) su LP line
         spectrumCtx.fillStyle = `rgba(251, 191, 36, ${handleOpacity})`;
         spectrumCtx.strokeStyle = `rgba(255, 255, 255, ${handleOpacity * 0.6})`;
         spectrumCtx.lineWidth = 1.5;
@@ -873,7 +782,6 @@ function startSpectrumLoop() {
         spectrumCtx.fill();
         spectrumCtx.stroke();
         
-        // Disegna etichette con frequenze in basso SOLO se il filtro è attivo
         if (eqEnabled) {
             spectrumCtx.font = 'bold 14px "Space Mono", monospace';
             spectrumCtx.textAlign = 'center';
@@ -885,20 +793,17 @@ function startSpectrumLoop() {
             spectrumCtx.fillText(lpLabel, lpX, height - 2);
         }
         
-        // Disegna etichette di frequenza sull'asse X
         spectrumCtx.font = '8px "Space Mono", monospace';
         spectrumCtx.fillStyle = '#e2e8f0';
         spectrumCtx.textAlign = 'center';
         
-        // Etichette da mostrare (indici selezionati delle frequencyBands)
-        const labelIndices = [0, 7, 13, 18, 23, 28, 30]; // 20Hz, 100Hz, 400Hz, 1kHz, 4kHz, 12.5kHz, 20kHz
+        const labelIndices = [0, 7, 13, 18, 23, 28, 30];
         
         labelIndices.forEach(index => {
             if (index < numBands) {
                 const freq = frequencyBands[index];
                 const x = index * (barWidth + gapWidth) + barWidth / 2;
                 
-                // Formatta la frequenza (Hz o kHz)
                 let label;
                 if (freq >= 1000) {
                     label = (freq / 1000).toFixed(freq >= 10000 ? 0 : 1) + 'k';
@@ -946,7 +851,6 @@ function attachVolumeSlider() {
 
     let dragging = false;
 
-    // Double-click to reset to 0 dB
     const resetToZero = (evt) => {
         setMasterVolume(0);
         updateThumb(0);
@@ -983,52 +887,36 @@ function attachVolumeSlider() {
 
 function initMetronome() {
     try {
-        // 1. VOLUME: Abbassiamo un po' il volume per non renderlo fastidioso
         metronomeVolume = new Tone.Volume(-10).toDestination();
         metronomePanner = new Tone.Panner(0).connect(metronomeVolume);
 
-        // 2. SUONO: Configuriamo il synth per sembrare un Woodblock/Click secco
-        // Usiamo un attacco velocissimo e un decadimento breve
         metronomeOsc = new Tone.MembraneSynth({
-            pitchDecay: 0.01,  // Molto veloce per l'effetto "click"
-            octaves: 1,        // Meno estensione sulle basse frequenze
-            oscillator: { type: 'sine' }, // Onda sinusoidale pura per pulizia
+            pitchDecay: 0.01,
+            octaves: 1,
+            oscillator: { type: 'sine' },
             envelope: {
-                attack: 0.001, // Attacco immediato
-                decay: 0.1,    // Coda molto corta (secco)
+                attack: 0.001,
+                decay: 0.1,
                 sustain: 0,
                 release: 0.1
             }
         }).connect(metronomePanner);
         
-        // 3. LOGICA DEL LOOP (SCHEDULING)
-        // Impostiamo la ripetizione su '4n' (semiminima/quarto).
-        // Dato che il tuo cursore si muove a '2n' (minima), questo farà 2 battiti per ogni spostamento.
         Tone.Transport.scheduleRepeat((time) => {
             if (metronomeEnabled) {
-                // Otteniamo la posizione corrente nel formato "bars:quarters:sixteenths"
-                // Esempio: "0:0:0", "0:1:0", "0:2:0"
                 const position = Tone.Transport.position.split(':');
                 const quarter = parseInt(position[1]);
 
-                // 4. ACCENTO:
-                // Se siamo sui quarti pari (0, 2), siamo allineati con il cursore (Downbeat) -> Nota Alta
-                // Se siamo sui quarti dispari (1, 3), siamo nel mezzo (Upbeat) -> Nota Bassa
                 if (quarter % 2 === 0) {
-                    // Click Alto (Suono primario) - Più acuto (G5)
                     metronomeOsc.triggerAttackRelease('G6', '32n', time, 1); 
                 } else {
-                    // Click Basso (Suddivisione) - Meno acuto (C6) e leggermente più piano (velocity 0.6)
                     metronomeOsc.triggerAttackRelease('C6', '32n', time, 0.6);
                 }
             }
-        }, '4n'); // <--- Qui sta la magia: '4n' è il doppio della velocità del cursore ('2n')
+        }, '4n');
         
-        // --- LOOP DEL CURSORE (RIMANE INVARIATO A '2n') ---
-        // Questo assicura che il cursore continui a muoversi lentamente mentre il metronomo batte il doppio
-        // Rimuoviamo Tone.Draw da qui. La logica deve scattare PRECISA col metronomo.
         transportLoopId = Tone.Transport.scheduleRepeat((time) => {
-            advanceHighlight(time); // Passiamo 'time' alla funzione
+            advanceHighlight(time);
         }, '2n');
         
         console.log('Metronome initialized: Woodblock style, 2 clicks per data step.');
@@ -1047,27 +935,19 @@ function updateMetronomeBPM(bpm) {
     }
 }
 
-// ============================================================
-// MIDI OUTPUT FUNCTIONS
-// ============================================================
 
-// Request MIDI access and populate output devices
 async function initMidiAccess() {
     try {
         const access = await navigator.requestMIDIAccess();
-        // Richiediamo anche sysex: true per massima compatibilità
         const midiAccess = await navigator.requestMIDIAccess({ sysex: true });
         
         const selectEl = document.getElementById('midiOutputSelect');
         const toggleBtn = document.getElementById('midiToggleBtn');
         const statusEl = document.getElementById('midiStatus');
 
-        // Funzione interna per aggiornare la lista (da chiamare all'avvio e ai cambiamenti)
         const updateMidiList = () => {
-            // Salva la selezione corrente se c'è
             const currentSelection = selectEl.value;
             
-            // Pulisci la lista mantenendo l'opzione di default
             selectEl.innerHTML = '<option value="">-- Nessuno --</option>';
             
             const outputs = midiAccess.outputs.values();
@@ -1076,15 +956,12 @@ async function initMidiAccess() {
 
             for (let output of outputs) {
                 hasOutputs = true;
-                // Filtra per non mostrare porte inutili (opzionale, rimuovi if se vuoi vedere tutto)
-                // if (output.name.includes("CTRL")) continue; 
 
                 const option = document.createElement('option');
                 option.value = output.id;
                 option.textContent = output.name;
                 selectEl.appendChild(option);
 
-                // Se la porta che avevamo selezionato esiste ancora, riselezionala
                 if (output.id === currentSelection) {
                     option.selected = true;
                     deviceFoundAgain = true;
@@ -1094,20 +971,16 @@ async function initMidiAccess() {
             if (hasOutputs) {
                 toggleBtn.style.display = 'inline-block';
                 if (!deviceFoundAgain && currentSelection !== "") {
-                     // Il dispositivo selezionato è stato scollegato
                      if (statusEl) statusEl.textContent = 'MIDI: Dispositivo scollegato';
-                     midiOutput = null; // Reset variabile globale
+                     midiOutput = null;
                 }
             } else {
                 if (statusEl) statusEl.textContent = 'MIDI: nessun dispositivo trovato';
             }
         };
 
-        // 1. Popola la lista subito
         updateMidiList();
 
-        // 2. Ascolta i cambiamenti (Hot-plugging)
-        // Se accendi il synth DOPO aver aperto il sito, questo lo rileverà
         midiAccess.onstatechange = (e) => {
             updateMidiList();
         };
@@ -1122,11 +995,10 @@ async function initMidiAccess() {
     }
 }
 
-// Send MIDI Note On message
 function sendMidiNoteOn(noteNumber, velocity = 100, channel = 0) {
     if (!midiOutput) return;
     
-    const noteOnMessage = [0x90 + channel, noteNumber, velocity]; // Note On
+    const noteOnMessage = [0x90 + channel, noteNumber, velocity];
     try {
         midiOutput.send(noteOnMessage);
         currentMidiNote = noteNumber;
@@ -1135,11 +1007,10 @@ function sendMidiNoteOn(noteNumber, velocity = 100, channel = 0) {
     }
 }
 
-// Send MIDI Note Off message
 function sendMidiNoteOff(noteNumber, channel = 0) {
     if (!midiOutput) return;
     
-    const noteOffMessage = [0x80 + channel, noteNumber, 0]; // Note Off
+    const noteOffMessage = [0x80 + channel, noteNumber, 0];
     try {
         midiOutput.send(noteOffMessage);
     } catch (e) {
@@ -1147,20 +1018,16 @@ function sendMidiNoteOff(noteNumber, channel = 0) {
     }
 }
 
-// Play MIDI note on Minilogue XD
 function playMidiNote(midiNumber) {
     if (!midiEnabled || !midiOutput) return;
     
-    // Stop previous note if different
     if (currentMidiNote !== null && currentMidiNote !== midiNumber) {
         sendMidiNoteOff(currentMidiNote);
     }
     
-    // Play new note
     sendMidiNoteOn(midiNumber, 100);
 }
 
-// Stop MIDI note
 function stopMidiNote() {
     if (currentMidiNote !== null) {
         sendMidiNoteOff(currentMidiNote);
@@ -1168,32 +1035,25 @@ function stopMidiNote() {
     }
 }
 
-// Load a sample from a remote URL and set its root MIDI (e.g., 60 for C4)
 async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
     try {
         if (typeof Tone === 'undefined') throw new Error('Tone.js required');
-        // Ensure Tone audio context is started (requires user gesture on some browsers)
         ensureToneStarted();
         
-        // Dispose old sample player if it exists (allow replacing sample)
         if (samplePlayer) {
             try {
                 samplePlayer.dispose();
             } catch (e) { /* ignore disposal errors */ }
         }
         
-        // Fetch the audio file as an ArrayBuffer
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
         
-        // Decode using Web Audio API directly
         const audioContext = Tone.getContext().rawContext;
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
         
-        // Create a Tone.Player from the decoded buffer
         samplePlayer = new Tone.Player({ onload: () => {} });
-        // Manually set the buffer
         samplePlayer.buffer.set(audioBuffer);
         
         const sampleRootMidi = Number(rootMidi) || 60;
@@ -1207,14 +1067,11 @@ async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
     }
 }
 
-// Carica uno dei preset interni dalla cartella "suoni"
 async function loadPresetSample(name) {
   const url = PRESET_SAMPLES[name];
   if (!url) return;
 
-  // Usa la stessa pipeline di loadSampleFromUrl,
-  // ma passando il nome leggibile come "name"
-  const rootMidi = 60; // Fixed root MIDI (C4) for all samples
+  const rootMidi = 60;
   await loadSampleFromUrl(url, rootMidi, name);
 
   const status = document.getElementById('sampleStatus');
@@ -1224,9 +1081,7 @@ async function loadPresetSample(name) {
 }
 
 
-// Prompt the user to pick a local audio file and load it as the sample.
 function pickSampleFile(rootMidi = 60, fileInputEl = null) {
-    // If a file input element is provided, use it (our UI adds one). Otherwise create temporary.
     const handleFile = async (f) => {
         if (!f) return;
         const url = URL.createObjectURL(f);
@@ -1241,13 +1096,11 @@ function pickSampleFile(rootMidi = 60, fileInputEl = null) {
     };
 
     if (fileInputEl) {
-        // Reset the input value to allow selecting the same file again (or a new one)
         fileInputEl.value = '';
         
         const file = fileInputEl.files && fileInputEl.files[0];
         if (file) return handleFile(file);
 
-        // attach change listener
         fileInputEl.onchange = (ev) => {
             const f = ev.target.files && ev.target.files[0];
             handleFile(f);
@@ -1266,7 +1119,6 @@ function pickSampleFile(rootMidi = 60, fileInputEl = null) {
     inp.click();
 }
 
-// Play loaded sample transposed to the requested MIDI note (oneshot) using playbackRate
 function pruneSampleVoices() {
     while (activeSampleVoices.length >= MAX_POLYPHONY) {
         const old = activeSampleVoices.shift();
@@ -1293,7 +1145,6 @@ function playSampleAtMidi(midi, time) {
             return false;
         }
         
-        // Assicurati che la catena audio sia inizializzata
         if (!audioRoutingInitialized) {
             initializeAudioChain();
         }
@@ -1309,7 +1160,6 @@ function playSampleAtMidi(midi, time) {
         const temp = new Tone.Player(samplePlayer.buffer);
         const cleanup = trackSampleVoice(temp);
         
-        // ✅ ROUTING SEMPLICE: Connetti SEMPRE all'input della catena
         temp.connect(effectsInputNode);
         
         temp.volume.value = -4;
@@ -1341,34 +1191,17 @@ function playSampleAtMidi(midi, time) {
     }
 }
 
-/* ============================================================
-   MODIFICA 1: Rimuovere il blocco sulle note ripetute
-   e ridurre il cooldown per permettere note veloci
-============================================================ */
-// Riduci il cooldown globale (dichiaralo in cima se non lo trovi, o modificalo)
-// const playCooldown = 50; // Mettilo a 50ms o anche 30ms invece di 150
 
-/* ============================================================
-   MODIFICA 1: Rimuovere il blocco sulle note ripetute
-   e ridurre il cooldown per permettere note veloci
-============================================================ */
-// Riduci il cooldown globale (dichiaralo in cima se non lo trovi, o modificalo)
-// const playCooldown = 50; // Mettilo a 50ms o anche 30ms invece di 150
 
 function playMidiIfSelected(midi, time) {
     if (!midi || typeof midi !== 'number') return;
     
-    // Rimuoviamo il controllo "midi === lastPlayedMidi" per permettere
-    // ribattuti (stessa nota suonata due volte di fila)
     const now = Date.now();
-    // Usa un cooldown molto breve (es. 50ms) solo per evitare glitch audio estremi,
-    // ma permetti di suonare tutto.
     if ((now - lastPlayTime) < 50) return; 
 
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return;
     
-    // Trova l'elemento tasto
     let keyEl = null;
     for (let i = 0; i < keyboard.children.length; i++) {
         const k = keyboard.children[i];
@@ -1376,22 +1209,15 @@ function playMidiIfSelected(midi, time) {
     }
     if (!keyEl) return;
 
-    // Se il tasto non è selezionato (non fa parte della scala o non è attivo), usciamo.
-    // NOTA: Se vuoi che suoni SEMPRE anche se non evidenziato, commenta questa riga:
     if (!keyEl.classList.contains('selectedKey')) return;
 
     try {
-        // Logica MIDI Out
         if (midiEnabled && midiOutput) {
-            // Nota: Se è la STESSA nota di prima, il synth potrebbe aver bisogno
-            // di un NoteOff prima del nuovo NoteOn se è monofonico, 
-            // ma per ora mandiamo il NoteOn diretto per ribattere.
             playMidiNote(midi);
             
             lastPlayedMidi = midi;
             lastPlayTime = now;
             
-            // Highlight visivo transitorio
             try { 
                 keyEl.classList.add('playingKey'); 
                 setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 150); 
@@ -1399,16 +1225,13 @@ function playMidiIfSelected(midi, time) {
             return;
         }
 
-        // Logica Sample (Audio interno)
         if (!samplePlayer || !samplePlayer.buffer) return;
         
-        // Qui forziamo il play anche se la nota è la stessa
         playSampleAtMidi(midi, time);
         
         lastPlayedMidi = midi;
         lastPlayTime = now;
         
-        // Highlight visivo
         try { 
             keyEl.classList.add('playingKey'); 
             setTimeout(() => { try { keyEl.classList.remove('playingKey'); } catch(e){} }, 150); 
@@ -1419,33 +1242,28 @@ function playMidiIfSelected(midi, time) {
     }
 }
 
-// Try to play the requested midi. If that key is not user-selected, find the
-// nearest user-selected key (by midi distance) and play/highlight that instead.
 function triggerPlayWithFallback(requestedMidi, time) {
     if (!requestedMidi || typeof requestedMidi !== 'number') return;
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return;
 
-    // find the direct key element
     let directEl = null;
     for (let i = 0; i < keyboard.children.length; i++) {
         const k = keyboard.children[i];
         if (k && k.dataset && Number(k.dataset.midi) === requestedMidi) { directEl = k; break; }
     }
 
-    // if direct exists and is selected, play it
     if (directEl && directEl.classList.contains('selectedKey')) {
         playMidiIfSelected(requestedMidi, time);
         return;
     }
 
-    // otherwise find nearest selected key by midi distance
     let nearest = null;
     let nearestDiff = Infinity;
     for (let i = 0; i < keyboard.children.length; i++) {
         const k = keyboard.children[i];
         if (!k || !k.dataset) continue;
-        if (!k.classList.contains('selectedKey')) continue; // must be user-selected
+        if (!k.classList.contains('selectedKey')) continue;
         const m = Number(k.dataset.midi);
         if (!Number.isFinite(m)) continue;
         const diff = Math.abs(m - requestedMidi);
@@ -1453,34 +1271,28 @@ function triggerPlayWithFallback(requestedMidi, time) {
     }
 
     if (nearest) {
-        // play nearest selected
         try {
             const midi = Number(nearest.dataset.midi);
-            // If MIDI output is enabled, send MIDI instead of playing sample
             if (midiEnabled && midiOutput) {
                 playMidiNote(midi);
-                // transient highlight
                 try { nearest.classList.add('playingKey'); setTimeout(() => { try { nearest.classList.remove('playingKey'); } catch(e){} }, 220); } catch(e){}
                 lastPlayedMidi = midi;
                 lastPlayTime = Date.now();
                 return;
             }
 
-            // Otherwise only play if a one-shot sample is loaded (no synth fallback)
             if (!samplePlayer || !samplePlayer.buffer) return;
             playSampleAtMidi(midi, time);
-            // transient highlight
             nearest.classList.add('playingKey');
             setTimeout(() => { try { nearest.classList.remove('playingKey'); } catch(e){} }, 220);
             lastPlayedMidi = midi;
             lastPlayTime = Date.now();
         } catch (e) { /* ignore */ }
     } else {
-        // no selected key found — do nothing
     }
 }
 
-let xSpacing = 5; // global spacing for advanceHighlight
+let xSpacing = 5;
 
 function createChart(canvasId, color, isPreview = false) {
     const chart = new Chart(document.getElementById(canvasId), {
@@ -1502,8 +1314,7 @@ function createChart(canvasId, color, isPreview = false) {
                     g.addColorStop(1, resolveColorToRgba(base, 0));
                     return g;
                 },
-                // pointRadius is scriptable so we can highlight the current index
-                pointRadius: 0, // Nascosto - usiamo solo i pallini originali
+                pointRadius: 0,
                 pointBackgroundColor: 'rgba(0,0,0,0)',
                 pointBorderColor: 'rgba(0,0,0,0)',
                 hoverRadius: 0
@@ -1548,7 +1359,6 @@ function createChart(canvasId, color, isPreview = false) {
                 legend: { display: false },
 
                 tooltip: {
-                    // Enable tooltips only for the preview chart (isPreview === true)
                     enabled: !!isPreview,
                     mode: 'nearest',
                     intersect: false,
@@ -1563,7 +1373,6 @@ function createChart(canvasId, color, isPreview = false) {
                     }
                 },
 
-                // enable our custom plugins with light options
                 lineShadow: { blur: 8, offsetY: 2 },
                 verticalLine: {},
                 horizontalSections: isPreview ? {} : false,
@@ -1574,44 +1383,35 @@ function createChart(canvasId, color, isPreview = false) {
 
 
     
-    // mark preview chart for horizontal sections rendering
     if (isPreview) chart.isHorizontalSections = true;
     
     return chart;
 }
 
-/* ============================================================
-   3) CREA I 3 GRAFICI
-============================================================ */
-// Stato globale per l'evidenziazione: dichiarato prima della creazione dei grafici
 let highlightIndex = -1;
 let highlightTimer = null;
-let highlightSpeed = 750; // ms di default (80 BPM = 750ms)
-let quantizeTimer = null; // timer per aggiornare evidenziazione tastiera
-let highlightIndexTime = -1; // timestamp dell'ultimo highlight
-let transportLoopId = null; // ID del loop schedulato su Transport per il cursore
-let originalPointIndices = []; // Indici interpolati che corrispondono ai punti originali
-let currentOriginalPointIndex = -1; // Indice corrente nell'array originalPointIndices
-let lastProcessedOriginalPointIndex = -1; // Track last original point that was actually played
+let highlightSpeed = 750;
+let quantizeTimer = null;
+let highlightIndexTime = -1;
+let transportLoopId = null;
+let originalPointIndices = [];
+let currentOriginalPointIndex = -1;
+let lastProcessedOriginalPointIndex = -1;
 
 const chartTemp = createChart("chartTemp", "red");
 const chartDens = createChart("chartDens", "orange");
 const chartVel  = createChart("chartVel",  "green");
 let selectedChartSource = 'Temp';
 
-// Preview chart (mostrato a destra della keyboard-box)
 let chartPreview = null;
 function ensurePreviewChart() {
     if (chartPreview) return;
     const canvas = document.getElementById('chartPreview');
     if (!canvas) return;
-    // ensure canvas dimensions match keyboard before creating the Chart instance
     syncPreviewHeight();
     chartPreview = createChart('chartPreview', 'green', true);
-    // small initial dataset
     chartPreview.data.datasets[0].data = [];
     chartPreview.update('none');
-    // wire mouse events (minimal) for preview canvas
     attachPreviewMouseTracking();
 }
 
@@ -1640,19 +1440,16 @@ function updatePreview(param = selectedChartSource) {
     else if (param === 'Dens') src = chartDens;
     else if (param === 'Vel') src = chartVel;
 
-    // copy dataset (shallow copy is fine)
     const srcDs = src.data.datasets[0];
     chartPreview.data.datasets[0].data = srcDs.data.slice();
     chartPreview.data.datasets[0].borderColor = srcDs.borderColor;
     chartPreview.data.datasets[0].backgroundColor = srcDs.backgroundColor;
     chartPreview.data.datasets[0].label = srcDs.label;
 
-    // ensure plugin knows which Y-values to draw dots for the preview
     if (param === 'Temp') window.originalDataYs = window.originalDataTemp || [];
     else if (param === 'Dens') window.originalDataYs = window.originalDataDens || [];
     else if (param === 'Vel')  window.originalDataYs = window.originalDataVel || [];
 
-    // Enable preview drawing of original points (so points are already at their place when you select)
     chartPreview.options.plugins.dataPointLines = {};
     try { chartPreview.update('none'); } catch (e) {}
 }
@@ -1660,47 +1457,28 @@ function updatePreview(param = selectedChartSource) {
 function attachPreviewMouseTracking() {
     const canvas = document.getElementById('chartPreview');
     if (!canvas) return;
-    // We intentionally do NOT track mouse movement for playback.
-    // Mouse-based highlighting and sound have been removed per user request.
 
-    // retain click for potential future interactions (no-op for now)
     canvas.addEventListener('click', (evt) => {});
 }
 
-// When the moving marker (highlightIndex) advances, detect original data points
-// whose X is close to the marker and highlight/play them accordingly.
-/* ============================================================
-   MODIFICA 2: Logica deterministica basata sugli indici originali
-============================================================ */
 function processMovingDotForIndex(idx, time) {
     try {
-        // Se non abbiamo dati o indici mappati, esci
         if (!window.originalDataXs || !window.originalDataXs.length) return;
         
-        // Se stiamo usando la modalità "Precisa" (originalPointIndices esiste),
-        // allora 'idx' È GIÀ l'indice esatto del punto. Non serve calcolare distanze.
         if (originalPointIndices && originalPointIndices.length > 0) {
             
-            // Recupera il dato Y (Temp, Dens o Vel a seconda di cosa visualizzi)
-            // Nota: window.originalDataYs viene settato in updateCharts/updatePreview
             const ys = window.originalDataYs || window.originalDataTemp || [];
             
-            // Dobbiamo trovare a QUALE punto originale corrisponde questo indice interpolato 'idx'.
-            // Poiché in advanceHighlight usiamo 'currentOriginalPointIndex', possiamo usare quello
-            // se è sincronizzato, oppure cercare l'indice.
-            // Per sicurezza, usiamo l'indice corrente tracciato in advanceHighlight:
             const dataIndex = currentOriginalPointIndex; 
             
             if (dataIndex >= 0 && dataIndex < ys.length) {
-                // Controllo anti-doppione: suona solo se è un punto nuovo rispetto all'ultimo processato
                 if (dataIndex !== lastProcessedOriginalPointIndex) {
                     
                     const yVal = ys[dataIndex];
                     
                     if (Number.isFinite(yVal)) {
-                        lastProcessedOriginalPointIndex = dataIndex; // Segna come suonato
+                        lastProcessedOriginalPointIndex = dataIndex;
 
-                        // --- Calcolo MIDI (Copied from original logic) ---
                         let minY, maxY;
                         if (chartPreview && chartPreview.scales && chartPreview.scales.y) {
                             minY = chartPreview.scales.y.min;
@@ -1718,23 +1496,17 @@ function processMovingDotForIndex(idx, time) {
                             midi = Math.max(48, Math.min(83, midi));
                         }
 
-                        // --- Highlight e Play ---
                         const keyboard = document.getElementById('verticalKeyboard');
                         if (keyboard) {
-                            // Rimuovi vecchi highlight quantizzati
                             for (let k = 0; k < keyboard.children.length; k++) {
                                 keyboard.children[k].classList.remove('quantizedKey');
                             }
                             
-                            // Trova e attiva il tasto
                             for (let k = 0; k < keyboard.children.length; k++) {
                                 const el = keyboard.children[k];
                                 if (el && el.dataset && Number(el.dataset.midi) === midi) {
                                     el.classList.add('quantizedKey');
                                     
-                                    // SUONA ORA SOLO SE LA RIPRODUZIONE È ATTIVA
-                                    // Usa triggerPlayWithFallback che gestisce la logica 
-                                    // "suona solo se selezionato" o "trova il più vicino"
                                     try {
                                         if (isPlaying) triggerPlayWithFallback(midi, time);
                                     } catch(e) { /* noop */ }
@@ -1745,11 +1517,9 @@ function processMovingDotForIndex(idx, time) {
                     }
                 }
             }
-            return; // Fine logica precisa
+            return;
         }
 
-        // ... Qui sotto rimarrebbe la logica vecchia "fallback" per interpolazione pura
-        // se originalPointIndices non fosse disponibile, ma nel tuo caso lo è sempre dopo il fetch.
         
     } catch (e) {
         console.warn("Errore process audio:", e);
@@ -1757,7 +1527,6 @@ function processMovingDotForIndex(idx, time) {
 }
 
 function getKeyIndexFromY(y) {
-    // map Y position in preview canvas to a key index
     const canvas = document.getElementById('chartPreview');
     const rect = canvas.getBoundingClientRect();
     const canvasHeight = rect.height;
@@ -1769,7 +1538,6 @@ function getKeyIndexFromY(y) {
     const sectionHeight = canvasHeight / numKeys;
     let keyIndex = Math.floor(y / sectionHeight);
     
-    // clamp to valid range
     keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
     return keyIndex;
 }
@@ -1778,39 +1546,30 @@ function getKeyIndexFromValue(value, maxValue, minValue) {
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return -1;
     const numKeys = keyboard.children.length;
-    // map value range to key index
     const clampedValue = Math.max(minValue, Math.min(maxValue, value));
     const ratio = (clampedValue - minValue) / (maxValue - minValue);
     let keyIndex = Math.floor(ratio * numKeys);
-    // clamp to valid range
     keyIndex = Math.max(0, Math.min(numKeys - 1, keyIndex));
     return keyIndex;
 
 }
 
-// ============================================================
-// PUNTO 1: NUOVE FUNZIONI PER ROUTING AUDIO
-// ============================================================
 
-// Variabili globali per gestione routing
 let audioRoutingInitialized = false;
 let effectsInputNode = null;
 let effectsOutputNode = null;
 
-// Inizializza la catena audio completa
 function initializeAudioChain() {
     if (audioRoutingInitialized) return;
     
     try {
         ensureToneStarted();
         
-        // 1. Crea la catena principale (sempre attiva, wet=0 di default)
         reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
         delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 });
         
-        // 2. Crea i filtri EQ (sempre presenti, possono essere bypassati)
         if (!eqHighpassFilter) {
             eqHighpassFilter = new Tone.Filter({
                 type: 'highpass',
@@ -1829,13 +1588,10 @@ function initializeAudioChain() {
             });
         }
         
-        // 3. Catena FISSA e COMPLETA (non cambia mai):
-        // Source → Delay → Chorus → Distortion → Reverb → Highpass → Lowpass → Volume → Compressor → Limiter
         delay.chain(chorus, distortion, reverb, eqHighpassFilter, eqLowpassFilter, masterVolume);
         
-        // 4. Definisci i nodi di input/output
-        effectsInputNode = delay;      // Tutte le sources si connettono qui
-        effectsOutputNode = masterVolume; // Output finale (già connesso a compressor/limiter)
+        effectsInputNode = delay;
+        effectsOutputNode = masterVolume;
         
         audioRoutingInitialized = true;
         console.log('✅ Audio chain initialized:');
@@ -1846,19 +1602,16 @@ function initializeAudioChain() {
     }
 }
 
-// Abilita/disabilita EQ (agisce solo sui parametri wet, non cambia routing)
 function setEQEnabled(enabled) {
     eqEnabled = enabled;
     
     if (eqHighpassFilter && eqLowpassFilter) {
         if (enabled) {
-            // Attiva i filtri impostando frequenze normali
             eqHighpassFilter.frequency.rampTo(eqHighpassFreq, 0.05);
             eqLowpassFilter.frequency.rampTo(eqLowpassFreq, 0.05);
         } else {
-            // Disattiva i filtri portando alle frequenze estreme (passano tutto)
-            eqHighpassFilter.frequency.rampTo(20, 0.05);      // Passa tutto sopra 20Hz
-            eqLowpassFilter.frequency.rampTo(20000, 0.05);    // Passa tutto sotto 20kHz
+            eqHighpassFilter.frequency.rampTo(20, 0.05);
+            eqLowpassFilter.frequency.rampTo(20000, 0.05);
         }
     }
     
@@ -1866,36 +1619,24 @@ function setEQEnabled(enabled) {
 }
 
 
-// ============================================================
-// STEP 1: Funzione per inizializzare correttamente il recorder
-// ============================================================
 function initRecorder() {
     try {
-        // Dispose vecchio recorder se esiste
         if (recorder) {
             try { recorder.dispose(); } catch (e) {}
             recorder = null;
         }
         
-        // Crea nuovo recorder con MIME type esplicito
-        // Tone.Recorder supporta: audio/webm, audio/wav (se disponibile)
         recorder = new Tone.Recorder({
-            mimeType: 'audio/webM' // WebM è universalmente supportato
-            // Nota: 'audio/wav' non è supportato da tutti i browser
+            mimeType: 'audio/webM'
         });
         
-        // ✅ CONNESSIONE CORRETTA: sorgente → recorder
-        // Connetti dal punto FINALE della catena (prima di Destination)
         if (mainLimiter) {
-            // Se hai il limiter, connetti da lì
             mainLimiter.connect(recorder);
             console.log('✅ Recorder connected to mainLimiter');
         } else if (mainCompressor) {
-            // Altrimenti dal compressor
             mainCompressor.connect(recorder);
             console.log('✅ Recorder connected to mainCompressor');
         } else if (masterVolume) {
-            // Altrimenti dal volume master
             masterVolume.connect(recorder);
             console.log('✅ Recorder connected to masterVolume');
         } else {
@@ -1910,26 +1651,20 @@ function initRecorder() {
     }
 }
 
-// ============================================================
-// STEP 2: Funzione per avviare la registrazione
-// ============================================================
 async function startRecording() {
     try {
         await ensureToneStarted();
         
-        // Inizializza recorder
         if (!initRecorder()) {
             throw new Error('Failed to initialize recorder');
         }
         
-        // Avvia registrazione
         await recorder.start();
         
         isRecording = true;
         recordingStartTime = Date.now();
         recordingDuration = 0;
         
-        // Timer per mostrare durata registrazione (opzionale)
         recordingTimerInterval = setInterval(() => {
             recordingDuration = Math.floor((Date.now() - recordingStartTime) / 1000);
             updateRecordingUI();
@@ -1945,9 +1680,6 @@ async function startRecording() {
     }
 }
 
-// ============================================================
-// STEP 3: Funzione per fermare e scaricare la registrazione
-// ============================================================
 async function stopRecording() {
     try {
         if (!recorder || !isRecording) {
@@ -1955,13 +1687,11 @@ async function stopRecording() {
             return false;
         }
         
-        // Ferma il timer
         if (recordingTimerInterval) {
             clearInterval(recordingTimerInterval);
             recordingTimerInterval = null;
         }
         
-        // Ferma registrazione e ottieni il blob
         const recording = await recorder.stop();
         
         if (!recording || recording.size === 0) {
@@ -1971,17 +1701,14 @@ async function stopRecording() {
         console.log(`✅ Recording stopped (${recordingDuration}s, ${(recording.size / 1024).toFixed(2)} KB)`);
         console.log(`📦 MIME type: ${recording.type}`);
         
-        // Determina estensione corretta dal MIME type
         let extension = 'webm';
         if (recording.type.includes('wav')) extension = 'wav';
         else if (recording.type.includes('ogg')) extension = 'ogg';
         else if (recording.type.includes('mp3')) extension = 'mp3';
         
-        // Genera nome file con timestamp
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
         const filename = `sun-synth-${timestamp}.${extension}`;
         
-        // Crea URL e scarica
         const url = URL.createObjectURL(recording);
         const anchor = document.createElement('a');
         anchor.download = filename;
@@ -1990,7 +1717,6 @@ async function stopRecording() {
         document.body.appendChild(anchor);
         anchor.click();
         
-        // Cleanup DOPO un delay (permetti al browser di scaricare)
         setTimeout(() => {
             document.body.removeChild(anchor);
             URL.revokeObjectURL(url);
@@ -1999,7 +1725,6 @@ async function stopRecording() {
         
         isRecording = false;
         
-        // Dispose recorder per liberare memoria
         if (recorder) {
             try { recorder.dispose(); } catch (e) {}
             recorder = null;
@@ -2011,7 +1736,6 @@ async function stopRecording() {
         console.error('❌ Failed to stop recording:', e);
         isRecording = false;
         
-        // Cleanup su errore
         if (recordingTimerInterval) {
             clearInterval(recordingTimerInterval);
             recordingTimerInterval = null;
@@ -2021,40 +1745,28 @@ async function stopRecording() {
     }
 }
 
-// ============================================================
-// STEP 4: Funzione per aggiornare UI durante registrazione
-// ============================================================
 function updateRecordingUI() {
     const recordBtn = document.getElementById('recordBtn');
     if (!recordBtn) return;
     
     if (isRecording) {
-        // Mostra durata in tempo reale (opzionale)
         const minutes = Math.floor(recordingDuration / 60);
         const seconds = recordingDuration % 60;
         const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
         
-        // Puoi aggiornare il testo del bottone o un altro elemento
-        // recordBtn.textContent = `⏺ ${timeStr}`;
         
-        // Animazione pulsante (pulsante rosso lampeggiante)
         recordBtn.style.animation = 'pulse 1s ease-in-out infinite';
     } else {
         recordBtn.style.animation = 'none';
-        // recordBtn.textContent = '⏺ REC';
     }
 }
 
-// ============================================================
-// STEP 5: Setup bottone registrazione
-// ============================================================
 function setupRecordButton() {
     const recordBtn = document.getElementById('recordBtn');
     if (!recordBtn) return;
     
     recordBtn.addEventListener('click', async () => {
         if (!isRecording) {
-            // Avvia registrazione
             recordBtn.classList.add('recording');
             const success = await startRecording();
             
@@ -2065,7 +1777,6 @@ function setupRecordButton() {
                 updateRecordingUI();
             }
         } else {
-            // Ferma e scarica registrazione
             recordBtn.classList.remove('recording');
             const success = await stopRecording();
             
@@ -2080,9 +1791,6 @@ function setupRecordButton() {
     console.log('✅ Record button setup complete');
 }
 
-// ============================================================
-// STEP 6 (OPZIONALE): Aggiungi CSS per animazione pulsante
-// ============================================================
 const recordButtonStyle = `
 <style>
 @keyframes pulse {
@@ -2103,7 +1811,6 @@ const recordButtonStyle = `
 </style>
 `;
 
-// Inserisci lo style nel document head (da fare una sola volta)
 if (!document.getElementById('record-button-style')) {
     const styleEl = document.createElement('div');
     styleEl.id = 'record-button-style';
@@ -2111,7 +1818,6 @@ if (!document.getElementById('record-button-style')) {
     document.head.appendChild(styleEl);
 }
 
-// Wire select change
 document.addEventListener('DOMContentLoaded', () => {
     const chartBoxes = document.querySelectorAll('.chart-box');
     chartBoxes.forEach(box => {
@@ -2121,32 +1827,22 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // initialize preview and selection (default Temp)
     setSelectedChart(selectedChartSource);
     
-    // ensure preview height matches keyboard
     syncPreviewHeight();
     setupPreviewKeyboardSync();
 
-    // ============================================================
-    // DRAG AND DROP SYSTEM FOR CHARTS TO KNOBS
-    // ============================================================
     
-    // Oggetto per tracciare le assegnazioni knob -> grafico
     const knobAssignments = {};
-    window.knobAssignments = knobAssignments; // Esponi globalmente
+    window.knobAssignments = knobAssignments;
     let draggedChart = null;
 
-    // Funzione per aggiornare la corona colorata della knob
     function updateKnobVisual(knobElement, chartSource) {
-        // Trova il parent effect-param
         const effectParam = knobElement.closest('.effect-param');
         if (!effectParam) return;
         
-        // Rimuovi tutte le classi di assegnazione precedenti
         effectParam.classList.remove('assigned-temp', 'assigned-dens', 'assigned-vel');
         
-        // Aggiungi la classe appropriata in base al grafico
         if (chartSource === 'Temp') {
             effectParam.classList.add('assigned-temp');
         } else if (chartSource === 'Dens') {
@@ -2156,7 +1852,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Funzione per ottenere il valore normalizzato (0-100%) di un grafico a un indice specifico
     function getNormalizedChartValue(chartSource, index) {
         let chart;
         if (chartSource === 'Temp') {
@@ -2174,23 +1869,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return null;
         }
 
-        // Trova min e max dell'intero dataset per normalizzare
         const values = data.map(d => d.y).filter(v => Number.isFinite(v));
         if (values.length === 0) return null;
         
         const min = Math.min(...values);
         const max = Math.max(...values);
         
-        // Ottieni il valore corrente all'indice
         const currentValue = data[index].y;
         if (!Number.isFinite(currentValue)) return null;
         
-        // Normalizza tra 0 e 100%
-        if (max === min) return 50; // Se tutti i valori sono uguali, ritorna 50%
+        if (max === min) return 50;
         return ((currentValue - min) / (max - min)) * 100;
     }
 
-    // Funzione per aggiornare il valore di una knob in base al grafico assegnato e all'indice corrente
     function updateKnobFromChart(knobId, chartSource, index) {
         if (typeof index === 'undefined' || index === null) index = highlightIndex;
         if (index < 0) return;
@@ -2201,15 +1892,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const knobElement = document.getElementById(knobId);
         if (!knobElement) return;
 
-        // Mappa globale per tenere traccia dell'angolo corrente delle knob (evita salti)
         window.knobAngles = window.knobAngles || {};
         const minAngle = -135;
         const maxAngle = 135;
         const targetAngle = minAngle + (normalizedValue / 100) * (maxAngle - minAngle);
 
-        // Se non presente, inizializza l'angolo corrente vicino al target per evitare "salti"
         if (typeof window.knobAngles[knobId] !== 'number') {
-            // prova a leggere dal transform inline, altrimenti usa target
             const m = (knobElement.style.transform || '').match(/-?\d+\.?\d*/);
             window.knobAngles[knobId] = m ? parseFloat(m[0]) : targetAngle;
         }
@@ -2218,7 +1906,6 @@ document.addEventListener('DOMContentLoaded', () => {
         animateEffectParameter(knobId, normalizedValue, 150);
     }
 
-    // Anima la rotazione della knob con easing morbido
     function animateKnobRotation(knobId, knobElement, targetAngle, duration = 150) {
         const startAngle = window.knobAngles && typeof window.knobAngles[knobId] === 'number'
             ? window.knobAngles[knobId]
@@ -2227,7 +1914,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const step = (now) => {
             const t = Math.min(1, (now - startTime) / duration);
-            // easing: easeInOutCubic
             const p = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
             const current = startAngle + (targetAngle - startAngle) * p;
             knobElement.style.transform = `rotate(${current}deg)`;
@@ -2237,7 +1923,6 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(step);
     }
 
-    // Anima il parametro dell'effetto per evitare step bruschi
     function animateEffectParameter(knobId, targetValue, duration = 150) {
         window.effectParamValues = window.effectParamValues || {};
         const startValue = (typeof window.effectParamValues[knobId] === 'number')
@@ -2256,9 +1941,7 @@ document.addEventListener('DOMContentLoaded', () => {
         requestAnimationFrame(tick);
     }
 
-    // Funzione per aggiornare i parametri degli effetti
     function updateEffectParameter(knobId, value) {
-        // Mappa dei knobId ai parametri degli effetti
         const paramMap = {
             'reverbDecayKnob': () => reverb.decay = (value / 100) * 10,
             'reverbWetKnob': () => reverb.wet.value = value / 100,
@@ -2269,7 +1952,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Setup drag events sui chart-box
     chartBoxes.forEach(box => {
         box.addEventListener('dragstart', (e) => {
             draggedChart = box.getAttribute('data-chart-source');
@@ -2277,7 +1959,6 @@ document.addEventListener('DOMContentLoaded', () => {
             e.dataTransfer.effectAllowed = 'copy';
             e.dataTransfer.setData('text/plain', draggedChart);
             
-            // Illumina tutte le knob non assegnate a questo grafico
             const allKnobs = document.querySelectorAll('.effect-knob, .knob');
             allKnobs.forEach(knob => {
                 const knobId = knob.id;
@@ -2293,7 +1974,6 @@ document.addEventListener('DOMContentLoaded', () => {
             box.classList.remove('dragging');
             draggedChart = null;
             
-            // Rimuovi glow da tutte le knob
             const allKnobs = document.querySelectorAll('.effect-knob, .knob');
             allKnobs.forEach(knob => {
                 knob.classList.remove('glow-available');
@@ -2302,7 +1982,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Setup drop zone su tutte le knobs
     const allKnobs = document.querySelectorAll('.effect-knob, .knob');
     allKnobs.forEach(knob => {
         knob.addEventListener('dragover', (e) => {
@@ -2325,21 +2004,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const knobId = knob.id;
             
             if (chartSource && knobId) {
-                // Salva l'assegnazione
                 knobAssignments[knobId] = chartSource;
                 
-                // Aggiorna la visualizzazione della knob
                 updateKnobVisual(knob, chartSource);
                 
-                // Aggiorna il valore della knob
                 updateKnobFromChart(knobId, chartSource);
             }
         });
     });
 
-    // Funzione per aggiornare tutte le knob assegnate quando i dati cambiano o l'indice avanza
     function updateAllAssignedKnobs(index) {
-        // Se non è specificato un indice, usa highlightIndex globale
         if (typeof index === 'undefined' || index === null) {
             index = highlightIndex;
         }
@@ -2350,13 +2024,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Aggiungi l'aggiornamento al ciclo di fetch dei dati
-    // Questa funzione verrà chiamata ogni volta che i dati vengono aggiornati
     window.updateAllAssignedKnobs = updateAllAssignedKnobs;
 
-    // ============================================================
-    // MODE SWITCH: PRESETS vs MIDI (mutually exclusive)
-    // ============================================================
     const modePresetsBtn = document.getElementById('modePresetsBtn');
     const modeMidiBtn = document.getElementById('modeMidiBtn');
     const modePresetsPanel = document.getElementById('modePresetsPanel');
@@ -2365,25 +2034,20 @@ document.addEventListener('DOMContentLoaded', () => {
     function setMode(mode) {
         const isPresets = mode === 'presets';
 
-        // Toggle button active state
         modePresetsBtn.classList.toggle('active', isPresets);
         modePresetsBtn.setAttribute('aria-selected', String(isPresets));
         modeMidiBtn.classList.toggle('active', !isPresets);
         modeMidiBtn.setAttribute('aria-selected', String(!isPresets));
 
-        // Show/hide panels
         modePresetsPanel.style.display = isPresets ? 'block' : 'none';
         modeMidiPanel.style.display = isPresets ? 'none' : 'block';
 
-        // Mutual exclusivity: deactivate the other function
         try {
             if (isPresets) {
-                // Disable MIDI
                 if (typeof midiEnabled !== 'undefined') midiEnabled = false;
                 const statusEl = document.getElementById('midiStatus');
                 if (statusEl) statusEl.textContent = 'MIDI: inattivo';
             } else {
-                // Disable Sample Presets
                 if (typeof samplePlayer !== 'undefined') samplePlayer = null;
                 if (typeof sampleLoadedName !== 'undefined') sampleLoadedName = null;
                 const status = document.getElementById('sampleStatus');
@@ -2397,26 +2061,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modePresetsBtn && modeMidiBtn) {
         modePresetsBtn.addEventListener('click', () => setMode('presets'));
         modeMidiBtn.addEventListener('click', () => setMode('midi'));
-        // default to presets
         setMode('presets');
     }
 
-    // ============================================================
-    // CONTEXT MENU per rimuovere l'assegnazione grafico-knob
-    // ============================================================
     
     const contextMenu = document.getElementById('knobContextMenu');
     const removeControlItem = document.getElementById('removeControl');
     let contextMenuKnob = null;
 
-    // Funzione per rimuovere l'assegnazione di un grafico da una knob
     function removeKnobAssignment(knobId) {
         if (!knobId || !knobAssignments[knobId]) return;
         
-        // Rimuovi l'assegnazione
         delete knobAssignments[knobId];
         
-        // Rimuovi la classe colorata dalla label
         const knobElement = document.getElementById(knobId);
         if (knobElement) {
             const effectParam = knobElement.closest('.effect-param');
@@ -2426,18 +2083,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Aggiungi event listener per click destro su tutte le knob
     allKnobs.forEach(knob => {
         knob.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             
             const knobId = knob.id;
             
-            // Mostra il menu solo se la knob ha un'assegnazione
             if (knobId && knobAssignments[knobId]) {
                 contextMenuKnob = knobId;
                 
-                // Posiziona il menu alla posizione del mouse
                 contextMenu.style.left = `${e.pageX}px`;
                 contextMenu.style.top = `${e.pageY}px`;
                 contextMenu.style.display = 'block';
@@ -2445,7 +2099,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Click sul menu item "Remove Control"
     removeControlItem.addEventListener('click', () => {
         if (contextMenuKnob) {
             removeKnobAssignment(contextMenuKnob);
@@ -2454,7 +2107,6 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.display = 'none';
     });
 
-    // Chiudi il menu quando si clicca altrove
     document.addEventListener('click', (e) => {
         if (!contextMenu.contains(e.target)) {
             contextMenu.style.display = 'none';
@@ -2462,21 +2114,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Chiudi il menu quando si scorre
     document.addEventListener('scroll', () => {
         contextMenu.style.display = 'none';
         contextMenuKnob = null;
     });
 
-    // ============================================================
-    // END CONTEXT MENU
-    // ============================================================
 
-    // ============================================================
-    // END DRAG AND DROP SYSTEM
-    // ============================================================
 
-    // --- Initialize MIDI Output ---
     try {
         initMidiAccess().then(midiAccess => {
             const selectEl = document.getElementById('midiOutputSelect');
@@ -2526,7 +2170,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Failed to initialize MIDI:', e);
     }
 
-    // --- Initialize audio effects ---
     try {
         initializeAudioChain();
     } catch (e) {
@@ -2534,17 +2177,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
 
-    // --- Effects knob controls ---
     try {
-        // Distortion controls
         setupEffectKnob('distortionDriveKnob', (value) => {
             if (distortion) distortion.distortion = value;
         }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('distortionToneKnob', (value) => {
-            // Oversample quality: 'none', '2x', '4x'
-            // Map 0-1 to quality levels (approximated with distortion curve)
-            // For simplicity, we'll just adjust the distortion amount as a "tone" control
             if (distortion) distortion.distortion = Math.max(0, distortion.distortion) * (0.5 + value * 0.5);
         }, 0, (v) => `${Math.round(v * 100)}%`);
         
@@ -2552,13 +2190,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (distortion) distortion.wet.value = value;
         }, 0, (v) => `${Math.round(v * 100)}%`);
 
-        // Chorus controls
         setupEffectKnob('chorusDepthKnob', (value) => {
             if (chorus) chorus.depth = value;
         }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('chorusRateKnob', (value) => {
-            // Map to frequency 0.1Hz - 10Hz
             if (chorus) chorus.frequency.value = 0.1 + value * 9.9;
         }, 0, (v) => `${(0.1 + v * 9.9).toFixed(1)} Hz`);
         
@@ -2566,14 +2202,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (chorus) chorus.wet.value = value;
         }, 0, (v) => `${Math.round(v * 100)}%`);
 
-        // Delay controls
         setupEffectKnob('delayTimeKnob', (value) => {
-            // Map to delay time 0.01s - 1s
             if (delay) delay.delayTime.value = 0.01 + value * 0.99;
         }, 0, (v) => `${((0.01 + v * 0.99) * 1000).toFixed(0)} ms`);
         
         setupEffectKnob('delayFeedbackKnob', (value) => {
-            // Feedback 0 - 0.9 (avoid runaway feedback)
             if (delay) delay.feedback.value = value * 0.9;
         }, 0, (v) => `${Math.round(v * 90)}%`);
         
@@ -2581,9 +2214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (delay) delay.wet.value = value;
         }, 0, (v) => `${Math.round(v * 100)}%`);
 
-        // Reverb controls
         setupEffectKnob('reverbDecayKnob', (value) => {
-            // Decay time 0.1s - 10s
             if (reverb) reverb.decay = 0.1 + value * 9.9;
         }, 0, (v) => `${(0.1 + v * 9.9).toFixed(1)} s`);
         
@@ -2592,13 +2223,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 0, (v) => `${Math.round(v * 100)}%`);
         
         setupEffectKnob('reverbSizeKnob', (value) => {
-            // PreDelay acts as "size" - map 0-0.1s
             if (reverb) reverb.preDelay = value * 0.1;
         }, 0, (v) => `${Math.round(v * 100)}%`);
 
-        // Toggle buttons (escludi il tasto EQ che è gestito separatamente)
         document.querySelectorAll('.effect-toggle').forEach(toggle => {
-            // Salta il tasto eqToggleBtn poiché è gestito in initFilterControls
             if (toggle.id === 'eqToggleBtn') return;
             
             toggle.addEventListener('click', function() {
@@ -2606,10 +2234,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const effectName = this.getAttribute('data-effect');
                 const isActive = this.classList.contains('active');
                 
-                // Update button text and state
                 this.textContent = isActive ? 'ON' : 'OFF';
                 
-                // Enable/disable effect by setting wet to 0 or restoring last value
                 switch(effectName) {
                     case 'distortion':
                         if (distortion) {
@@ -2651,7 +2277,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                         break;
-                    // filters temporarily disabled
                 }
             });
         });
@@ -2659,11 +2284,9 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Failed to setup effect knobs:', e);
     }
 
-    // --- Sample UI wiring removed (one-shot loading from PC removed) ---
 });
 
 window.addEventListener('resize', () => {
-    // keep preview height synced when window size changes
     syncPreviewHeight();
 });
 
@@ -2671,7 +2294,6 @@ window.addEventListener('resize', () => {
 chartTemp.data.datasets[0].label = "Temperatura";
         chartDens.data.datasets[0].label = "Densità (protons/cm^3)";
         chartVel.data.datasets[0].label  = "Velocità (km/s)";
-// Sincronizzazione tooltip / hover: solo verso il chart di preview abilitato (per evitare pallini sui mini-chart)
 function attachSync(master, slaves) {
     const canvas = master.canvas;
     canvas.addEventListener('mousemove', (evt) => {
@@ -2679,10 +2301,7 @@ function attachSync(master, slaves) {
         if (!points.length) return;
         const idx = points[0].index;
 
-        // Non sincronizziamo il tooltip del preview quando si passa con il mouse sui mini-chart
-        // (Vogliamo che il preview mostri data/ora solo quando si scorre direttamente sul preview stesso.)
 
-        // Non impostiamo active elements sugli altri mini-chart per evitare effetti di hover che mostrano i pallini
     });
 
     canvas.addEventListener('mouseleave', () => {
@@ -2696,9 +2315,6 @@ attachSync(chartTemp, [chartDens, chartVel]);
 attachSync(chartDens, [chartTemp, chartVel]);
 attachSync(chartVel, [chartTemp, chartDens]);
 
-/* ============================================================
-   4) FETCH + INTERPOLAZIONE + UPDATE
-============================================================ */
 async function updateCharts() {
     try {
         const url = "https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json";
@@ -2717,7 +2333,6 @@ async function updateCharts() {
 
 
 
-        // --- FILTRA SOLO GLI ULTIMI 60 MINUTI DEI DATI DISPONIBILI ---
         const ONE_HOUR = 60 * 60 * 1000;
         const maxTime = pts.length ? pts[pts.length - 1].t.getTime() : Date.now();
         const ptsUsed = pts.filter(p => p.t.getTime() >= maxTime - ONE_HOUR);
@@ -2729,25 +2344,20 @@ async function updateCharts() {
         const vel  = ptsUsed.map(p => p.vel);
         const temp = ptsUsed.map(p => p.temp);
         
-        // store original data points for lines and dots in all charts
         window.originalDataXs = xs;
         window.originalDataTemp = temp;
         window.originalDataDens = dens;
         window.originalDataVel = vel;
-        window.originalDataYs = temp; // default per preview
+        window.originalDataYs = temp;
 
-        // Interpolazione su 300 punti, clamp minX/maxX ai valori validi
         const NUM = 300;
         let minX = Math.min(...xs);
         let maxX = Math.max(...xs);
-        // Evita minX == maxX (singolo punto)
         if (minX === maxX) maxX = minX + 1;
-        // Genera newXs solo nel range dei dati
         const newXs = Array.from({length: NUM}, (_, i) =>
             minX + (i / (NUM - 1)) * (maxX - minX)
         ).filter(x => x >= minX && x <= maxX);
 
-        // Interpolazione lineare
         const tempInterp = interpolateLinear(xs, temp, newXs);
         const densInterp = interpolateLinear(xs, dens, newXs);
         const velInterp  = interpolateLinear(xs, vel,  newXs);
@@ -2756,11 +2366,9 @@ async function updateCharts() {
         chartDens.data.datasets[0].data = newXs.map((x, i) => ({ x, y: densInterp[i] }));
         chartVel.data.datasets[0].data  = newXs.map((x, i) => ({ x, y: velInterp[i] }));
 
-        // Trova gli indici interpolati più vicini ai punti originali
         originalPointIndices = [];
         for (let i = 0; i < xs.length; i++) {
             const originalX = xs[i];
-            // Trova l'indice interpolato più vicino
             let closestIdx = 0;
             let minDist = Math.abs(newXs[0] - originalX);
             for (let j = 1; j < newXs.length; j++) {
@@ -2777,17 +2385,15 @@ async function updateCharts() {
         chartDens.update("none");
         chartVel.update("none");
 
-        // Aggiorna anche la preview chart se presente, per mantenerla sincronizzata con i nuovi dati
         updatePreview(selectedChartSource);
 
-        // Aggiorna tutte le knob assegnate con i nuovi dati
         if (typeof window.updateAllAssignedKnobs === 'function') {
             window.updateAllAssignedKnobs();
         }
 
         realHighlightIndex = realHighlightIndex - xSpacing - 1;
         highlightIndex = realHighlightIndex;
-        advanceHighlight(); // riavanza l'highlight alla nuova posizione
+        advanceHighlight();
 
     } catch (e) {
         console.error("Errore fetching NOAA:", e);
@@ -2795,12 +2401,6 @@ async function updateCharts() {
 }
 
 
-/* ============================================================
-   5) AVVIO + AGGIORNA OGNI 60 SECONDI
-============================================================ */
-// ---------- Highlighting: stato e controlli ----------
-// `highlightIndex` indica l'indice corrente evidenziato (o -1 nessuno)
-    // `highlightIndex` indica l'indice corrente evidenziato (o -1 nessuno)
 
 function isValidDataAt(chart, idx) {
     const d = chart.data.datasets[0].data[idx];
@@ -2822,12 +2422,10 @@ function advanceHighlight(time) {
     const len = chartTemp.data.datasets[0].data.length;
     if (!len) return;
 
-    // --- LOGICA (Calcolo indici) ---
     if (originalPointIndices && originalPointIndices.length > 0) {
         const prevIndex = currentOriginalPointIndex;
         currentOriginalPointIndex = (currentOriginalPointIndex + 1) % originalPointIndices.length;
         
-        // If we wrapped around to the beginning, reset the processed points tracker
         if (prevIndex >= 0 && currentOriginalPointIndex === 0) {
             lastProcessedOriginalPointIndex = -1;
         }
@@ -2840,19 +2438,16 @@ function advanceHighlight(time) {
         let next = highlightIndex + skipPoints;
         if (next >= len) {
             next = 0;
-            // Reset when wrapping around
             lastProcessedOriginalPointIndex = -1;
         }
         highlightIndex = next;
         realHighlightIndex = next;
     }
     
-    // --- AUDIO (Suona esattamente al 'time' previsto) ---
     currIdxTime = indexToTime(chartTemp, highlightIndex);
     
     if(currIdxTime !== highlightIndexTime) {
         highlightIndexTime = currIdxTime;
-        // Passiamo 'time' alla catena di funzioni che generano il suono
         processMovingDotForIndex(highlightIndex, time);
         
         if (typeof window.updateAllAssignedKnobs === 'function') {
@@ -2860,11 +2455,8 @@ function advanceHighlight(time) {
         }
     }
 
-    // --- GRAFICA (Questa parte la avvolgiamo in Tone.Draw per fluidità video) ---
     Tone.Draw.schedule(() => {
         updateHighlightRender();
-        // Log solo per debug grafico
-        // console.log("realHighlightIndex:", realHighlightIndex); 
     }, time);
 }
 
@@ -2873,16 +2465,14 @@ function startHighlighting(speedMs = 200) {
     highlightSpeed = speedMs;
     ensureToneStarted();
     
-    // se i dati non sono ancora pronti, aspetta un po' e poi avvia
     if (!chartTemp.data.datasets[0].data.length) {
         realHighlightIndex = -1;
         highlightIndex = -1;
-        // Use a simple timer to wait for data, then start Transport
         if (highlightTimer !== null) clearInterval(highlightTimer);
         highlightTimer = setInterval(() => {
             if (chartTemp.data.datasets[0].data.length) {
                 clearInterval(highlightTimer);
-                highlightTimer = 'transport'; // marker that we're using transport
+                highlightTimer = 'transport';
                 if (Tone.Transport.state !== 'started') {
                     Tone.Transport.start();
                 }
@@ -2891,19 +2481,15 @@ function startHighlighting(speedMs = 200) {
         return;
     }
 
-    // Start from -1 so first advance goes to 0 (first point)
     if (highlightIndex === -1 || realHighlightIndex === -1) {
-        // Imposta a -1 così il primo tick del Transport porterà al primo punto
         currentOriginalPointIndex = -1;
         highlightIndex = -1;
         realHighlightIndex = -1;
-        lastProcessedOriginalPointIndex = -1; // Reset processed points when starting fresh
+        lastProcessedOriginalPointIndex = -1;
     }
     
-    // Mark that we're using Transport instead of setInterval
     highlightTimer = 'transport';
     
-    // Start Tone.Transport (this will trigger both metronome and cursor)
     if (Tone.Transport.state !== 'started') {
         Tone.Transport.start();
     }
@@ -2912,7 +2498,6 @@ function startHighlighting(speedMs = 200) {
 }
 
 function stopHighlighting() {
-    // Stop Transport if it's running (pauses both metronome and cursor)
     if (typeof Tone !== 'undefined' && Tone.Transport && Tone.Transport.state === 'started') {
         Tone.Transport.pause();
         console.log('Transport paused at position:', Tone.Transport.seconds);
@@ -2927,15 +2512,12 @@ function stopHighlighting() {
     }
     highlightTimer = null;
     
-    // Reset last processed point to allow replaying from start
     lastProcessedOriginalPointIndex = -1;
     
-    // clear any auto-quantized highlights
     try {
         const keyboard = document.getElementById('verticalKeyboard');
         if (keyboard) for (let k = 0; k < keyboard.children.length; k++) keyboard.children[k].classList.remove('quantizedKey');
     } catch (e) {}
-    // If MIDI is enabled, ensure last held note is turned off
     try {
         if (midiEnabled) stopMidiNote();
     } catch (e) {}
@@ -2953,7 +2535,6 @@ function setHighlightSpeed(ms) {
     }
 }
 
-// Restituisce la chart selezionata (clic sulla chart)
 function getSelectedChart() {
     const value = selectedChartSource || 'Temp';
     if (value === 'Temp') return { chart: chartTemp, label: 'Temperatura' };
@@ -2961,8 +2542,6 @@ function getSelectedChart() {
     return { chart: chartVel, label: 'Velocità' };
 }
 
-// Stampa in console il valore quantizzato (0..34) della chart selezionata
-    // Stampa in console l'indice quantizzato (0..34) corrente della chart selezionata
     function logCurrentSelectedValue() {
         const q = quantizeCurrentSelectedValueToRange(35);
         if (q < 0) {
@@ -2973,7 +2552,6 @@ function getSelectedChart() {
         return q;
 }
 
-// Ritorna solo il valore (numero) corrente della chart selezionata, o null
 function getCurrentSelectedValue() {
     const { chart } = getSelectedChart();
     const idx = typeof highlightIndex === 'number' ? highlightIndex : -1;
@@ -2987,7 +2565,6 @@ function getCurrentSelectedValue() {
         return { value: p.y, min, max };
 }
 
-    // Minimo corrente (scala o dati) della chart selezionata
     function getSelectedChartMin() {
         const { chart } = getSelectedChart();
         if (!chart) return null;
@@ -3000,7 +2577,6 @@ function getCurrentSelectedValue() {
         } catch (e) { return null; }
     }
 
-    // Massimo corrente (scala o dati) della chart selezionata
     function getSelectedChartMax() {
         const { chart } = getSelectedChart();
         if (!chart) return null;
@@ -3013,32 +2589,25 @@ function getCurrentSelectedValue() {
         } catch (e) { return null; }
     }
 
-// Setup generic effect knob with drag interaction
 function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = null) {
     const knob = document.getElementById(knobId);
     if (!knob) return;
     
     let isDragging = false;
     let startY = 0;
-    let startValue = 0; // 0 to 1 range
+    let startValue = 0;
     
-    // Find the param-label element
     const effectParam = knob.closest('.effect-param');
     const paramLabel = effectParam ? effectParam.querySelector('.param-label') : null;
     let originalLabelText = paramLabel ? paramLabel.textContent : '';
     
-    // Map knob rotation to effect value (0 -> 1)
     const updateKnobRotation = (value) => {
-        // value: 0 to 1
-        // rotation: -135deg to 135deg
         const angle = -135 + value * 270;
         knob.style.transform = `rotate(${angle}deg)`;
     };
     
-    // Initialize at 0 (no effect)
     updateKnobRotation(0);
     
-    // Double-click to reset to default
     knob.addEventListener('dblclick', (e) => {
         updateKnobRotation(defaultValue);
         callback(defaultValue);
@@ -3048,12 +2617,10 @@ function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = nu
     knob.addEventListener('mousedown', (e) => {
         isDragging = true;
         startY = e.clientY;
-        // Get current rotation to determine start value
         const transform = knob.style.transform;
         const match = transform.match(/rotate\(([^)]+)deg\)/);
         if (match) {
             const angle = parseFloat(match[1]);
-            // Convert angle (-135 to 135) back to value (0 to 1)
             startValue = (angle + 135) / 270;
         } else {
             startValue = 0;
@@ -3065,11 +2632,10 @@ function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = nu
     document.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
         
-        const deltaY = startY - e.clientY; // Up is positive
+        const deltaY = startY - e.clientY;
         
-        // Check if this knob has a chart assigned - use different sensitivity
         const hasChartAssigned = window.knobAssignments && window.knobAssignments[knobId];
-        const sensitivity = hasChartAssigned ? 0.002 : 0.005; // More sensitive when chart assigned
+        const sensitivity = hasChartAssigned ? 0.002 : 0.005;
         
         let newValue = startValue + (deltaY * sensitivity);
         newValue = Math.max(0, Math.min(1, newValue));
@@ -3077,7 +2643,6 @@ function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = nu
         updateKnobRotation(newValue);
         callback(newValue);
         
-        // Update label with value only if no chart is assigned and formatter is provided
         if (!hasChartAssigned && paramLabel && valueFormatter) {
             paramLabel.textContent = valueFormatter(newValue);
         }
@@ -3088,7 +2653,6 @@ function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = nu
             isDragging = false;
             document.body.style.cursor = 'default';
             
-            // Restore original label text if no chart is assigned
             const hasChartAssigned = window.knobAssignments && window.knobAssignments[knobId];
             if (!hasChartAssigned && paramLabel) {
                 paramLabel.textContent = originalLabelText;
@@ -3097,15 +2661,11 @@ function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatter = nu
     });
 }
 
-// Wiring dei controlli UI (knob + play/pause)
 const speedKnobControl = document.getElementById('speedKnobControl');
 const speedValue = document.getElementById('speedValue');
 const playPauseBtn = document.getElementById('playPauseBtn');
 let isPlaying = false;
 
-// Utility functions for BPM conversion
-// BPM = 60000 / (ms per beat)
-// ms per beat = 60000 / BPM
 function msToBpm(ms) {
     return Math.round(60000 / ms);
 }
@@ -3114,21 +2674,15 @@ function bpmToMs(bpm) {
     return Math.round(60000 / bpm);
 }
 
-// Knob logic
 if (speedKnobControl) {
     let isDragging = false;
     let startY = 0;
     let startSpeed = highlightSpeed;
-    // Min and max BPM: 80 - 190 BPM
-    // 80 BPM = 750 ms per beat
-    // 190 BPM = 316 ms per beat
     const minBpm = 80;
     const maxBpm = 190;
-    const minSpeed = bpmToMs(maxBpm); // 190 BPM = ~316 ms (fastest)
-    const maxSpeed = bpmToMs(minBpm); // 80 BPM = 750 ms (slowest)
+    const minSpeed = bpmToMs(maxBpm);
+    const maxSpeed = bpmToMs(minBpm);
     
-    // Initial rotation based on current speed
-    // Map speed (maxSpeed -> minSpeed) to rotation (-135 -> 135 degrees)
 
     const updateKnobRotation = (speed) => {
         const t = 1 - (speed - minSpeed) / (maxSpeed - minSpeed);
@@ -3136,25 +2690,21 @@ if (speedKnobControl) {
         speedKnobControl.style.transform = `rotate(${angle}deg)`;
     };
 
-    // --- NUOVO CODICE: EDITING MANUALE BPM ---
     if (speedValue) {
-        speedValue.style.cursor = "pointer"; // Indica che è cliccabile
+        speedValue.style.cursor = "pointer";
         speedValue.title = "Doppio click per inserire BPM";
 
         speedValue.addEventListener('dblclick', () => {
-            // 1. Prendi il valore attuale (es. "120" da "120 BPM")
             const currentText = speedValue.textContent;
             const currentBpm = parseInt(currentText) || 120;
 
-            // 2. Crea l'input al volo
             const input = document.createElement('input');
             input.type = 'number';
             input.value = currentBpm;
             
-            // Stile inline per farlo sembrare integrato
             input.style.width = '50px';
             input.style.background = 'transparent';
-            input.style.color = '#fbbf24'; // Stesso giallo del testo
+            input.style.color = '#fbbf24';
             input.style.border = '1px solid #fbbf24';
             input.style.borderRadius = '4px';
             input.style.fontFamily = '"Space Mono", monospace';
@@ -3162,53 +2712,42 @@ if (speedKnobControl) {
             input.style.textAlign = 'center';
             input.style.outline = 'none';
 
-            // 3. Sostituisci il testo con l'input
             speedValue.textContent = ''; 
             speedValue.appendChild(input);
             input.focus();
-            input.select(); // Seleziona tutto il numero per sovrascrittura rapida
+            input.select();
 
-            // Funzione per salvare e chiudere
             const commitBpm = () => {
                 let newVal = parseInt(input.value);
 
-                // Validazione: se non è un numero o è fuori range, usa i limiti
                 if (isNaN(newVal)) newVal = currentBpm;
                 newVal = Math.max(minBpm, Math.min(maxBpm, newVal));
 
-                // Converti in millisecondi (logica inversa di msToBpm)
                 const newMs = bpmToMs(newVal);
 
-                // Aggiorna TUTTO il sistema (velocità, manopola, metronomo)
                 setHighlightSpeed(newMs);
-                updateKnobRotation(newMs); // Ruota la manopola visivamente
+                updateKnobRotation(newMs);
                 updateMetronomeBPM(newVal);
                 
-                // Ripristina il testo
                 speedValue.textContent = `${newVal} BPM`;
             };
 
-            // Salva se premo invio
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
                     commitBpm();
                 }
-                // Annulla se premo Esc
                 if (e.key === 'Escape') {
                     speedValue.textContent = `${currentBpm} BPM`;
                 }
             });
 
-            // Salva se clicco fuori (blur)
             input.addEventListener('blur', () => {
-                commitBpm(); // Puoi commentare questa riga se preferisci che il blur annulli invece di salvare
+                commitBpm();
             });
         });
     }
     
-// Double-click to reset to default (120 BPM)
     speedKnobControl.addEventListener('dblclick', (e) => {
-        // 500ms corrisponde esattamente a 120 BPM (60000 / 120 = 500)
         const defaultSpeed = 500; 
         
         setHighlightSpeed(defaultSpeed);
@@ -3216,10 +2755,8 @@ if (speedKnobControl) {
         
         const bpm = msToBpm(defaultSpeed);
         
-        // Aggiorna subito la scritta sotto la manopola
         if (speedValue) speedValue.textContent = `${bpm} BPM`;
         
-        // Aggiorna il metronomo
         updateMetronomeBPM(bpm);
         
         e.preventDefault();
@@ -3232,22 +2769,16 @@ if (speedKnobControl) {
         document.body.style.cursor = 'ns-resize';
         e.preventDefault();
         
-        // Show tooltip
-        //if (speedValue) speedValue.classList.add('visible');
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
         
-        const deltaY = startY - e.clientY; // Up is positive
-        const sensitivity = 5; // Pixels per ms change
+        const deltaY = startY - e.clientY;
+        const sensitivity = 5;
         
-        // Calculate new speed
-        // Dragging up (positive delta) should decrease ms (faster = higher BPM)
-        // Dragging down (negative delta) should increase ms (slower = lower BPM)
         let newSpeed = startSpeed - (deltaY * sensitivity);
         
-        // Clamp values
         newSpeed = Math.max(minSpeed, Math.min(maxSpeed, newSpeed));
         newSpeed = Math.round(newSpeed);
         
@@ -3256,7 +2787,6 @@ if (speedKnobControl) {
             updateKnobRotation(newSpeed);
             const bpm = msToBpm(newSpeed);
             if (speedValue) speedValue.textContent = `${bpm} BPM`;
-            // Update metronome BPM
             updateMetronomeBPM(bpm);
         }
     });
@@ -3266,8 +2796,6 @@ if (speedKnobControl) {
             isDragging = false;
             document.body.style.cursor = 'default';
             
-            // Hide tooltip
-            //if (speedValue) speedValue.classList.remove('visible');
         }
     });
 }
@@ -3286,25 +2814,21 @@ if (playPauseBtn) {
     });
 }
 
-// Reset button control
 const resetBtn = document.getElementById('resetBtn');
 if (resetBtn) {
     resetBtn.addEventListener('click', () => {
-        // Stop playback if playing
         if (isPlaying) {
             stopHighlighting();
             playPauseBtn.classList.remove('playing');
             isPlaying = false;
         }
-        // Reset cursor to initial position
         highlightIndex = -1;
         realHighlightIndex = -1;
         highlightIndexTime = null;
         currIdxTime = null;
         currentOriginalPointIndex = -1;
-        lastProcessedOriginalPointIndex = -1; // Reset processed points tracker
+        lastProcessedOriginalPointIndex = -1;
         
-        // Reset Transport position to start
         if (typeof Tone !== 'undefined' && Tone.Transport) {
             Tone.Transport.stop();
             Tone.Transport.position = 0;
@@ -3316,7 +2840,6 @@ if (resetBtn) {
     });
 }
 
-// Metronome button control
 const metronomeBtn = document.getElementById('metronomeBtn');
 if (metronomeBtn) {
     metronomeBtn.addEventListener('click', () => {
@@ -3330,28 +2853,20 @@ if (metronomeBtn) {
             metronomeBtn.classList.remove('active');
             console.log('Metronome disabled');
         }
-        // Il metronomo si attiva/disattiva solo, non avvia il Transport
-        // Il Transport (e quindi il synth) parte solo con il pulsante Play
     });
 }
 
-// Record button control
-// Setup record button with proper audio routing
 setupRecordButton();
 
 attachVolumeSlider();
 
-/* ============================================================
-   6) TASTIERA VERTICALE – 2 OTTAVE
-============================================================ */
 
-// Scale musicali di base (intervalli in semitoni dalla tonica)
 const SCALES = {
-  major:           [0, 2, 4, 5, 7, 9, 11],        // maggiore
-  naturalMinor:    [0, 2, 3, 5, 7, 8, 10],        // minore naturale
-  majorPentatonic: [0, 2, 4, 7, 9],               // pentatonica maggiore
-  minorPentatonic: [0, 3, 5, 7, 10],              // pentatonica minore
-  dorian:          [0, 2, 3, 5, 7, 9, 10]         // dorica
+  major:           [0, 2, 4, 5, 7, 9, 11],
+  naturalMinor:    [0, 2, 3, 5, 7, 8, 10],
+  majorPentatonic: [0, 2, 4, 7, 9],
+  minorPentatonic: [0, 3, 5, 7, 10],
+  dorian:          [0, 2, 3, 5, 7, 9, 10]
 };
 
 
@@ -3381,15 +2896,12 @@ function drawVerticalKeyboard() {
         keyboard.appendChild(createBlackKey());
         keyboard.appendChild(createWhiteKey());
     }
-    // after building keyboard, sync preview height
     syncPreviewHeight();
 
-    // assign MIDI numbers to keys: bottom -> C3 (48), top -> B5 (83)
     try {
         const keys = keyboard.children;
         const numKeys = keys.length;
         for (let i = 0; i < numKeys; i++) {
-            // DOM order: 0 is top, last is bottom. We want bottom -> 48
             const midi = 48 + (numKeys - 1 - i);
             keys[i].dataset.midi = String(midi);
         }
@@ -3397,7 +2909,6 @@ function drawVerticalKeyboard() {
 }
 
 function syncPreviewHeight() {
-    // Match preview chart height to keyboard height, and width to container
     const canvas = document.getElementById('chartPreview');
     if (!canvas) return;
 
@@ -3407,21 +2918,16 @@ function syncPreviewHeight() {
     const kbCont = document.getElementById('keyboardContainer');
     const devicePR = window.devicePixelRatio || 1;
 
-    // Determine keyboard rendered height
     let keyboardHeight = 0;
     if (kbCont) {
-        // Use offsetHeight (rendered height). If empty, fallback to scrollHeight
         keyboardHeight = Math.max(kbCont.offsetHeight || 0, kbCont.scrollHeight || 0);
     } else {
-        // Fallback to current preview height
         keyboardHeight = previewBox.clientHeight;
     }
 
-    // Force preview box to the keyboard height
     try { previewBox.style.height = keyboardHeight + 'px'; } catch (e) {}
 
-    // Compute canvas size inside the preview box padding
-    const padding = 30; // total vertical padding (15 top + 15 bottom)
+    const padding = 30;
     const cssWidth = Math.max(200, Math.floor(previewBox.clientWidth - padding));
     const cssHeight = Math.max(100, Math.floor(previewBox.clientHeight - padding));
 
@@ -3437,7 +2943,6 @@ function syncPreviewHeight() {
     }
 }
 
-// Observe keyboard/container size changes and resync preview
 let __kbPreviewRO;
 function setupPreviewKeyboardSync() {
     try {
@@ -3457,10 +2962,8 @@ function createWhiteKey() {
     key.classList.add('white');
     key.style.cursor = 'pointer';
     key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key)); };
-    // Visual hover: add/remove hoveredKey when mouse enters/leaves
     key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
     key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
-    // Press feedback for mouse and touch (pointer events)
     key.addEventListener('pointerdown', () => { key.classList.add('pressedKey'); });
     key.addEventListener('pointerup', () => { key.classList.remove('pressedKey'); });
     key.addEventListener('pointercancel', () => { key.classList.remove('pressedKey'); });
@@ -3474,10 +2977,8 @@ function createBlackKey() {
     key.classList.add('black');
     key.style.cursor = 'pointer';
     key.onclick = () => { highlightKey(Array.from(key.parentNode.children).indexOf(key)); };
-    // Visual hover: add/remove hoveredKey when mouse enters/leaves
     key.addEventListener('mouseenter', () => { key.classList.add('hoveredKey'); });
     key.addEventListener('mouseleave', () => { key.classList.remove('hoveredKey'); });
-    // Press feedback for mouse and touch (pointer events)
     key.addEventListener('pointerdown', () => { key.classList.add('pressedKey'); });
     key.addEventListener('pointerup', () => { key.classList.remove('pressedKey'); });
     key.addEventListener('pointercancel', () => { key.classList.remove('pressedKey'); });
@@ -3498,34 +2999,27 @@ function applyScaleToKeyboard() {
     const keys = keyboard.children;
     const numKeys = keys.length;
 
-    // 1. Recupera la scala scelta
     const scaleSelect = document.getElementById('scaleSelect');
     const scaleName = scaleSelect ? scaleSelect.value : '';
 
-    // 2. Recupera la nota fondamentale (Root) scelta (0=C, 1=C#, ecc.)
     const rootNoteSelect = document.getElementById('rootNoteSelect');
-    // Se non esiste ancora il selettore, usa 0 (Do) come default
     const rootValue = rootNoteSelect ? parseInt(rootNoteSelect.value) : 0; 
 
-    // Pulisce le vecchie evidenziazioni
     for (let i = 0; i < numKeys; i++) {
         keys[i].classList.remove('scaleKey');
         keys[i].classList.remove('selectedKey');
     }
 
-    // Se non è selezionata nessuna scala valida, esci
     if (!scaleName || !SCALES[scaleName]) return;
 
     const intervals = SCALES[scaleName];
 
-    // Evidenzia le note corrette
     for (let i = 0; i < numKeys; i++) {
         const keyEl = keys[i];
         const midi = Number(keyEl.dataset.midi);
         
         if (!Number.isFinite(midi)) continue;
 
-        // Calcolo: (NotaMidi - RootScelta + 12) % 12 ci dice l'intervallo relativo
         const noteClass = midi % 12;
         const intervalFromRoot = (noteClass - rootValue + 12) % 12;
 
@@ -3548,25 +3042,19 @@ function quantizeHighlightToKey() {
     const dataLen = chart.data.datasets[0].data.length;
     if (dataLen === 0) return;
 
-    // Ottengo il valore Y corrente evidenziato
     maxValue = getSelectedChartMax();
     minValue = getSelectedChartMin();
     if (maxValue === null || minValue === null) return;
     const key = getKeyIndexFromValue(chart.data.datasets[0].data[highlightIndex] ? chart.data.datasets[0].data[highlightIndex].y : 0, maxValue, minValue);
 
-    // rimuovi solo la classe di quantizzazione precedente (non rimuovere le selezioni utente)
     for (let k = 0; k < keys.length; k++) {
         keys[k].classList.remove('quantizedKey');
     }
 
-    // Aggiungi indicazione di quantizzazione (classe separata) alla chiave calcolata
     if (key >= 0 && key < numKeys) {
-        // DOM order: 0 is top, last is bottom. getKeyIndexFromValue returns 0..numKeys-1 with 0=minimum value (bottom),
-        // so convert to DOM index by mirroring
         const target = keys[numKeys - 1 - key];
         if (target) {
             target.classList.add('quantizedKey');
-            // se la key è stata selezionata dall'utente, suona la nota corrispondente
             try {
                 if (target.classList.contains('selectedKey')) {
                     const midi = Number(target.dataset.midi);
@@ -3582,10 +3070,8 @@ function quantizeHighlightToKey() {
 function indexToTime(chart, idx) {
     const point = chart.data.datasets[0].data[idx];
 
-    // --- ACCESSO AL TEMPO (X) ---
     if (point) {
         const date = new Date(point.x);
-        // Formatta in HH:mm
         const timeStr = date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         return timeStr;
     }
@@ -3594,14 +3080,13 @@ function indexToTime(chart, idx) {
 
 
 
-// Disegno al load
 drawVerticalKeyboard();
 
-// Avviare l'aggiornamento dei grafici ogni 60s (resta manuale l'evidenziazione)
+applyScaleToKeyboard();
+
 updateCharts();
 setInterval(updateCharts, 60_000);
 
-// Select dei preset di one-shot
 const presetSelect = document.getElementById('presetSampleSelect');
 if (presetSelect) {
   presetSelect.addEventListener('change', (e) => {
@@ -3609,7 +3094,6 @@ if (presetSelect) {
     const status = document.getElementById('sampleStatus');
 
     if (!name) {
-      // torna a "nessun sample"
       samplePlayer = null;
       sampleLoadedName = null;
             if (status) status.textContent = 'Sample mode: no sample';
@@ -3619,14 +3103,12 @@ if (presetSelect) {
     loadPresetSample(name);
   });
 
-    // Se al load c'è già una selezione (es. default Halo), caricala
     if (presetSelect.value) {
         try { loadPresetSample(presetSelect.value); } catch (e) { console.warn('Preset autoload failed', e); }
     }
 }
 
 
-// Listener cambio SCALA
 const scaleSelectEl = document.getElementById('scaleSelect');
 if (scaleSelectEl) {
     scaleSelectEl.addEventListener('change', () => {
@@ -3634,7 +3116,6 @@ if (scaleSelectEl) {
     });
 }
 
-// Listener cambio NOTA (Root)
 const rootNoteSelectEl = document.getElementById('rootNoteSelect');
 if (rootNoteSelectEl) {
     rootNoteSelectEl.addEventListener('change', () => {
@@ -3643,4 +3124,3 @@ if (rootNoteSelectEl) {
 }
 
 
-// No default sample autoload; remain in "No Sample" state until user picks a preset
