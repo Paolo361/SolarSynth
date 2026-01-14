@@ -103,6 +103,20 @@ export function stopMidiNote() {
     }
 }
 
+export function sendAllNotesOff(channel = 0) {
+    if (!midiOutput) return;
+    try {
+        midiOutput.send([0xB0 + channel, 123, 0]);
+    } catch (e) {
+        console.error('Failed to send All Notes Off:', e);
+    }
+}
+
+export function panicMidi(channel = 0) {
+    stopMidiNote();
+    sendAllNotesOff(channel);
+}
+
 export function setMidiOutput(output) {
     midiOutput = output;
 }

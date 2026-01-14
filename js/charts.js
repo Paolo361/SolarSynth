@@ -476,9 +476,9 @@ export function initCharts() {
     chartDens = createChart("chartDens", "orange");
     chartVel = createChart("chartVel", "green");
     
-    chartTemp.data.datasets[0].label = "Temperatura";
-    chartDens.data.datasets[0].label = "Densità (protons/cm^3)";
-    chartVel.data.datasets[0].label = "Velocità (km/s)";
+    chartTemp.data.datasets[0].label = "Temperature (K)";
+    chartDens.data.datasets[0].label = "Density (protons/cm^3)";
+    chartVel.data.datasets[0].label = "Speed (km/s)";
     
     window.chartTemp = chartTemp;
     window.chartDens = chartDens;
@@ -744,6 +744,13 @@ export function stopTransport() {
         clearInterval(highlightTimer);
     }
     highlightTimer = null;
+
+        // Ensure any MIDI note playing from transport is stopped
+    import('./midi.js').then(mod => {
+        if (mod && typeof mod.panicMidi === 'function') {
+            mod.panicMidi();
+        }
+    }).catch(() => {});
 }
 
 export function resetTransport() {
@@ -763,231 +770,3 @@ export function resetTransport() {
     
     updateHighlightRender();
 }
-
-
-
-/*
-!!! Applicando queste modifiche,
-    il progetto sarà molto più leggero sulla CPU !!!
-
-   1) Manca il Fallback Dati: Se il server NOAA non risponde
-   (o sei offline durante la presentazione), i grafici resteranno vuoti.
-
-   2) Il Loop di Rendering è ancora pesante:
-   In charts.js (processMovingDotForIndex),
-   il codice cicla ancora su tutti i tasti della tastiera (che sono 36+) ogni volta che il cursore si muove,
-   rimuovendo le classi una per una.
-
-quindi:
-
-1. Implementazione "Data Fallback" (Sicurezza per la Demo)
-Sostituisci la funzione updateCharts in charts.js con questa versione.
-Se la fetch fallisce, genererà dati verosimili automaticamente.
-
-// In charts.js
-
-// Aggiungi questa funzione helper per generare dati finti
-function generateDummyData() {
-    console.warn("⚠️ Using Dummy Data (Offline/Fallback Mode)");
-    const now = Date.now();
-    const data = [];
-    // Genera 24 ore di dati (1 punto ogni minuto circa)
-    for (let i = 0; i < 1440; i+=10) {
-        const t = new Date(now - (1440 - i) * 60000).toISOString();
-        // Crea onde sinusoidali "realistiche" per sembrare vento solare
-        const dens = 5 + Math.sin(i * 0.02) * 4 + Math.random(); // 1-10 p/cm3
-        const vel = 400 + Math.sin(i * 0.01) * 100 + Math.random() * 20; // 300-500 km/s
-        const temp = 100000 + Math.sin(i * 0.015) * 50000 + Math.random() * 10000; // 50k-150k K
-        data.push([t, dens.toFixed(2), vel.toFixed(2), temp.toFixed(0)]);
-    }
-    return data;
-}
-
-export async function updateCharts() {
-    let raw;
-    try {
-        const url = 'https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json';
-        // Timeout di 3 secondi per non bloccare l'app se internet è lento
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        
-        const resp = await fetch(url, { 
-            cache: 'no-store',
-            signal: controller.signal 
-        });
-        clearTimeout(timeoutId);
-        
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        
-        const text = await resp.text();
-        if (!text || text.trim().length === 0) throw new Error('Empty response');
-        
-        raw = JSON.parse(text);
-        
-    } catch (e) {
-        console.error('Error updating charts (switching to fallback):', e.message);
-        raw = generateDummyData(); // <--- QUI SCATTA IL FALLBACK
-    }
-
-    // ... (Il resto della logica di parsing rimane identico)
-    if (typeof raw[0][0] === 'string' && isNaN(Date.parse(raw[0][0]))) raw.shift();
-    
-    const pts = raw.map(r => ({
-        t: new Date(r[0]),
-        dens: Number(r[1]),
-        vel: Number(r[2]),
-        temp: Number(r[3])
-    })).filter(p => !isNaN(p.t));
-
-    // ... (continua con il resto della tua funzione esistente) ...
-    // Assicurati di copiare tutto il resto della tua funzione updateCharts originale da qui in giù
-    // (ordinamento, filtraggio ONE_HOUR, interpolazione, ecc.)
-    
-    // [CODICE ESISTENTE...]
-    pts.sort((a, b) => a.t - b.t);
-        
-    const ONE_HOUR = 60 * 60 * 1000;
-    const maxTime = pts.length ? pts[pts.length - 1].t.getTime() : Date.now();
-    const ptsUsed = pts.filter(p => p.t.getTime() >= maxTime - ONE_HOUR);
-    
-    const xs = ptsUsed.map(p => p.t.getTime());
-    const dens = ptsUsed.map(p => p.dens);
-    const vel = ptsUsed.map(p => p.vel);
-    const temp = ptsUsed.map(p => p.temp);
-    
-    window.originalDataXs = xs;
-    window.originalDataTemp = temp;
-    window.originalDataDens = dens;
-    window.originalDataVel = vel;
-    window.originalDataYs = temp;
-    
-    const NUM = 300;
-    let minX = Math.min(...xs);
-    let maxX = Math.max(...xs);
-    if (minX === maxX) maxX = minX + 1;
-    const newXs = Array.from({length: NUM}, (_, i) =>
-        minX + (i / (NUM - 1)) * (maxX - minX)
-    ).filter(x => x >= minX && x <= maxX);
-    
-    const tempInterp = interpolateLinear(xs, temp, newXs);
-    const densInterp = interpolateLinear(xs, dens, newXs);
-    const velInterp = interpolateLinear(xs, vel, newXs);
-    
-    originalPointIndices = [];
-    for (let i = 0; i < xs.length; i++) {
-        const originalX = xs[i];
-        let closestIdx = 0;
-        let minDist = Math.abs(newXs[0] - originalX);
-        for (let j = 1; j < newXs.length; j++) {
-            const dist = Math.abs(newXs[j] - originalX);
-            if (dist < minDist) {
-                minDist = dist;
-                closestIdx = j;
-            }
-        }
-        originalPointIndices.push(closestIdx);
-    }
-    
-    if (window.chartTemp) {
-        window.chartTemp.data.datasets[0].data = newXs.map((x, i) => ({ x, y: tempInterp[i] }));
-        window.chartTemp.update('none');
-    }
-    
-    if (window.chartDens) {
-        window.chartDens.data.datasets[0].data = newXs.map((x, i) => ({ x, y: densInterp[i] }));
-        window.chartDens.update('none');
-    }
-    
-    if (window.chartVel) {
-        window.chartVel.data.datasets[0].data = newXs.map((x, i) => ({ x, y: velInterp[i] }));
-        window.chartVel.update('none');
-    }
-    
-    if (window.updatePreview) {
-        window.updatePreview();
-    }
-    
-    console.log(`Charts updated: ${xs.length} original points (last hour) → ${NUM} interpolated`);
-}
-
-
-2. Ottimizzazione Rendering (Performance)
-Sostituisci processMovingDotForIndex in charts.js.
-Questa versione memorizza l'ultimo tasto illuminato (lastQuantizedKey) per evitare di dover pulire l'intera tastiera a ogni frame.
-
-// Aggiungi questa variabile all'inizio del file charts.js insieme alle altre (export let...)
-let lastQuantizedKey = null; 
-
-function processMovingDotForIndex(idx, time) {
-    try {
-        if (!window.originalDataXs || !window.originalDataXs.length) return;
-        
-        if (originalPointIndices && originalPointIndices.length > 0) {
-            const ys = window.originalDataYs || window.originalDataTemp || [];
-            const dataIndex = currentOriginalPointIndex;
-            
-            if (dataIndex >= 0 && dataIndex < ys.length) {
-                if (dataIndex !== lastProcessedOriginalPointIndex) {
-                    const yVal = ys[dataIndex];
-                    
-                    if (Number.isFinite(yVal)) {
-                        lastProcessedOriginalPointIndex = dataIndex;
-
-                        // Calcolo range
-                        let minY = 0, maxY = 100;
-                        if (chartPreview && chartPreview.scales && chartPreview.scales.y) {
-                            minY = chartPreview.scales.y.min;
-                            maxY = chartPreview.scales.y.max;
-                        } else {
-                            const numericYs = ys.filter(v => Number.isFinite(v));
-                            if (numericYs.length) {
-                                minY = Math.min(...numericYs);
-                                maxY = Math.max(...numericYs);
-                            }
-                        }
-
-                        // Mapping MIDI
-                        let midi = 48;
-                        if (maxY !== minY) {
-                            const ratio = (yVal - minY) / (maxY - minY);
-                            midi = Math.round(48 + ratio * (83 - 48));
-                            midi = Math.max(48, Math.min(83, midi));
-                        }
-
-                        // --- INIZIO OTTIMIZZAZIONE ---
-                        const keyboard = document.getElementById('verticalKeyboard');
-                        if (keyboard) {
-                            // 1. Rimuovi classe SOLO dall'ultimo tasto attivo (invece di loop su tutti)
-                            if (lastQuantizedKey && lastQuantizedKey.classList) {
-                                lastQuantizedKey.classList.remove('quantizedKey');
-                                lastQuantizedKey = null;
-                            }
-                            
-                            // 2. Trova il nuovo tasto (questo loop è inevitabile ma veloce)
-                            // Nota: Si potrebbe ottimizzare ulteriormente usando un array mappato per MIDI,
-                            // ma dato che sono pochi div, questo va bene.
-                            for (let k = 0; k < keyboard.children.length; k++) {
-                                const el = keyboard.children[k];
-                                if (el && el.dataset && Number(el.dataset.midi) === midi) {
-                                    el.classList.add('quantizedKey');
-                                    lastQuantizedKey = el; // Memorizza riferimento
-                                    
-                                    if (window.triggerPlayWithFallback) {
-                                        window.triggerPlayWithFallback(midi, time);
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                        // --- FINE OTTIMIZZAZIONE ---
-                    }
-                }
-            }
-            return;
-        }
-    } catch (e) {
-        console.warn("Errore process audio:", e);
-    }
-}
-
-*/
