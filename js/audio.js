@@ -8,15 +8,18 @@ export let toneStarted = false;
 export let lastPlayedMidi = null;
 export let lastPlayTime = 0;
 
-// Import setupEffectKnob from ui module
+// Importa setupEffectKnob da ui.js (assicurati che ui.js sia aggiornato con il doppio click)
 import { setupEffectKnob as uiSetupEffectKnob } from './ui.js';
-const setupEffectKnob = uiSetupEffectKnob;export function setLastPlayedMidi(midi) {
+const setupEffectKnob = uiSetupEffectKnob;
+
+export function setLastPlayedMidi(midi) {
     lastPlayedMidi = midi;
 }
 
 export function setLastPlayTime(time) {
     lastPlayTime = time;
 }
+
 export const playCooldown = 150;
 export let samplePlayer = null;
 export let sampleLoadedName = null;
@@ -42,7 +45,7 @@ export let audioRoutingInitialized = false;
 export let effectsInputNode = null;
 export let effectsOutputNode = null;
 
-// Audio state object - mutabile per permettere aggiornamenti da spectrum.js
+// Audio state object
 export const audioState = {
     eqEnabled: false,
     eqHighpassFreq: 20,
@@ -57,7 +60,7 @@ export const audioState = {
     midiEnabled: false
 };
 
-// Getter/Setter per compatibilità
+// Getter/Setter variabili locali
 export let eqEnabled = false;
 export let eqHighpassFreq = 20;
 export let eqLowpassFreq = 20000;
@@ -85,7 +88,6 @@ export const PRESET_SAMPLES = {
     halo: 'suoni/halo.wav'
 };
 
-// Setter per sincronizzare audioState con variabili locali
 export function syncAudioState() {
     audioState.eqEnabled = eqEnabled;
     audioState.eqHighpassFreq = eqHighpassFreq;
@@ -98,11 +100,12 @@ export function syncAudioState() {
     audioState.eqLowpassFilter = eqLowpassFilter;
 }
 
-// Functions for spectrum.js to update EQ from drag/scroll
+// --- FIX: Applica le frequenze SOLO se l'EQ è abilitato ---
 export function setEQHighpassFreq(freq) {
     eqHighpassFreq = freq;
     audioState.eqHighpassFreq = freq;
-    if (eqHighpassFilter) {
+    // Se EQ è spento, aggiorniamo solo la variabile, non il filtro
+    if (eqEnabled && eqHighpassFilter) {
         eqHighpassFilter.frequency.rampTo(freq, 0.05);
     }
 }
@@ -110,7 +113,8 @@ export function setEQHighpassFreq(freq) {
 export function setEQLowpassFreq(freq) {
     eqLowpassFreq = freq;
     audioState.eqLowpassFreq = freq;
-    if (eqLowpassFilter) {
+    // Se EQ è spento, aggiorniamo solo la variabile, non il filtro
+    if (eqEnabled && eqLowpassFilter) {
         eqLowpassFilter.frequency.rampTo(freq, 0.05);
     }
 }
@@ -118,7 +122,7 @@ export function setEQLowpassFreq(freq) {
 export function setEQHighpassRolloff(rolloff) {
     eqHighpassRolloff = rolloff;
     audioState.eqHighpassRolloff = rolloff;
-    if (eqHighpassFilter) {
+    if (eqEnabled && eqHighpassFilter) {
         eqHighpassFilter.rolloff = rolloff;
     }
 }
@@ -126,10 +130,11 @@ export function setEQHighpassRolloff(rolloff) {
 export function setEQLowpassRolloff(rolloff) {
     eqLowpassRolloff = rolloff;
     audioState.eqLowpassRolloff = rolloff;
-    if (eqLowpassFilter) {
+    if (eqEnabled && eqLowpassFilter) {
         eqLowpassFilter.rolloff = rolloff;
     }
 }
+// -----------------------------------------------------------
 
 export function ensureToneStarted() {
     try {
@@ -141,7 +146,8 @@ export function ensureToneStarted() {
                 attack: 0.01,
                 release: 0.1
             }).connect(mainLimiter);
-            masterVolume = new Tone.Volume(0).connect(mainCompressor);
+            // FIX POP: Inizializza volume a -Infinity (muto)
+            masterVolume = new Tone.Volume(-Infinity).connect(mainCompressor);
         }
         if (!outputMeter && masterVolume) {
             outputMeter = new Tone.Meter({ normalRange: false });
@@ -153,16 +159,18 @@ export function ensureToneStarted() {
             fftAnalyser = new Tone.FFT(512);
             masterVolume.connect(fftAnalyser);
             
-            // Initialize spectrum visualization
             import('./spectrum.js').then(spectrumModule => {
                 spectrumModule.initSpectrum(fftAnalyser);
-                // setupSpectrumCanvasInteraction is called from main.js after window.setEQ* functions are set
             }).catch(e => console.warn('Failed to init spectrum:', e));
         }
         
         if (!toneStarted && typeof Tone !== 'undefined' && Tone.start) {
             Tone.start();
             toneStarted = true;
+            // FIX POP: Fade-in di 1.5 secondi
+            if (masterVolume) {
+                masterVolume.volume.rampTo(currentVolumeDb, 1.5);
+            }
         }
         if (!metronomeOsc) {
             initMetronome();
@@ -176,7 +184,8 @@ export function setMasterVolume(volumeDb) {
     ensureToneStarted();
     const clamped = Math.max(VOLUME_MIN, Math.min(VOLUME_MAX, volumeDb));
     currentVolumeDb = clamped;
-    if (masterVolume) masterVolume.volume.value = clamped;
+    // Usa rampTo per evitare click istantanei
+    if (masterVolume) masterVolume.volume.rampTo(clamped, 0.1);
 }
 
 export function initMetronome() {
@@ -260,10 +269,8 @@ export async function loadSampleFromUrl(url, rootMidi = 60, name = null) {
 export async function loadPresetSample(name) {
     const url = PRESET_SAMPLES[name];
     if (!url) return;
-
     const rootMidi = 60;
     await loadSampleFromUrl(url, rootMidi, name);
-
     const status = document.getElementById('sampleStatus');
     if (status && name) {
         status.textContent = `Sample mode: Preset (${name})`;
@@ -285,10 +292,8 @@ export function pickSampleFile(rootMidi = 60, fileInputEl = null) {
 
     if (fileInputEl) {
         fileInputEl.value = '';
-        
         const file = fileInputEl.files && fileInputEl.files[0];
         if (file) return handleFile(file);
-
         fileInputEl.onchange = (ev) => {
             const f = ev.target.files && ev.target.files[0];
             handleFile(f);
@@ -347,7 +352,6 @@ export function playSampleAtMidi(midi, time) {
         const cleanup = trackSampleVoice(temp);
         
         temp.connect(effectsInputNode);
-        
         temp.volume.value = -4;
         
         const playbackRate = Math.pow(2, semitoneShift / 12);
@@ -386,7 +390,7 @@ export function initializeAudioChain() {
         reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
-        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.8 });
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.5 });
         
         if (!eqHighpassFilter) {
             eqHighpassFilter = new Tone.Filter({
@@ -407,7 +411,6 @@ export function initializeAudioChain() {
         }
         
         delay.chain(chorus, distortion, reverb, eqHighpassFilter, eqLowpassFilter, masterVolume);
-        
         effectsInputNode = delay;
         effectsOutputNode = masterVolume;
         
@@ -425,14 +428,15 @@ export function setEQEnabled(enabled) {
     
     if (eqHighpassFilter && eqLowpassFilter) {
         if (enabled) {
+            // Ripristina le frequenze salvate
             eqHighpassFilter.frequency.rampTo(eqHighpassFreq, 0.05);
             eqLowpassFilter.frequency.rampTo(eqLowpassFreq, 0.05);
         } else {
+            // Bypassa: apri tutto
             eqHighpassFilter.frequency.rampTo(20, 0.05);
             eqLowpassFilter.frequency.rampTo(20000, 0.05);
         }
     }
-    
     console.log(`EQ ${enabled ? 'enabled' : 'disabled'}`);
 }
 
@@ -464,9 +468,9 @@ export function createEQFilters() {
     }
 }
 
+// --- Funzioni locali (Helper) indispensabili ---
 function startDbMeterLoop() {
     if (meterAnimationId) return;
-    
     const loop = () => {
         const fill = document.getElementById('dbMeterFill');
         if (!fill || !outputMeter) {
@@ -475,17 +479,15 @@ function startDbMeterLoop() {
         }
         let level = outputMeter.getValue();
         if (!Number.isFinite(level)) level = -60;
-        const colorLevel = level;
         const clamped = Math.max(-60, Math.min(0, level));
         const pct = Math.max(0, Math.min(1, (clamped + 60) / 60));
         fill.style.width = `${pct * 100}%`;
         let color = '#22c55e';
-        if (colorLevel > -3 && colorLevel <= 0) color = '#fbbf24';
-        else if (colorLevel > 0) color = '#ef4444';
+        if (level > -3 && level <= 0) color = '#fbbf24';
+        else if (level > 0) color = '#ef4444';
         fill.style.background = color;
         meterAnimationId = requestAnimationFrame(loop);
     };
-    
     meterAnimationId = requestAnimationFrame(loop);
 }
 
@@ -523,7 +525,6 @@ function attachVolumeSlider() {
     updateDbReadout(currentVolumeDb);
 
     let dragging = false;
-
     const resetToZero = (evt) => {
         setMasterVolume(0);
         updateThumb(0);
@@ -540,12 +541,10 @@ function attachVolumeSlider() {
         applyVolumeFromEvent(evt);
         evt.preventDefault();
     };
-
     const moveDrag = (evt) => {
         if (!dragging) return;
         applyVolumeFromEvent(evt);
     };
-
     const endDrag = () => {
         if (!dragging) return;
         dragging = false;
@@ -558,17 +557,13 @@ function attachVolumeSlider() {
     document.addEventListener('mouseup', endDrag);
 }
 
-
 function setupEffectToggle(effectName) {
     const toggleBtns = document.querySelectorAll(`[data-effect="${effectName}"]`);
-    
     toggleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             if (effectName === 'eq') {
-                // Special handling for EQ
                 eqEnabled = !eqEnabled;
                 audioState.eqEnabled = eqEnabled;
-                
                 if (eqEnabled) {
                     btn.classList.add('active');
                     btn.textContent = 'ON';
@@ -576,26 +571,12 @@ function setupEffectToggle(effectName) {
                     btn.classList.remove('active');
                     btn.textContent = 'OFF';
                 }
-                
-                // Update filter frequencies based on eqEnabled state
-                if (eqHighpassFilter && eqLowpassFilter) {
-                    if (eqEnabled) {
-                        eqHighpassFilter.frequency.rampTo(eqHighpassFreq, 0.05);
-                        eqLowpassFilter.frequency.rampTo(eqLowpassFreq, 0.05);
-                    } else {
-                        eqHighpassFilter.frequency.rampTo(20, 0.05);
-                        eqLowpassFilter.frequency.rampTo(20000, 0.05);
-                    }
-                }
-                
+                setEQEnabled(eqEnabled);
                 return;
             }
-            
             const effectNode = getEffectNode(effectName);
             if (!effectNode) return;
-            
             const isActive = btn.classList.contains('active');
-            
             if (isActive) {
                 btn.classList.remove('active');
                 btn.textContent = 'OFF';
@@ -668,7 +649,7 @@ export async function initAudioUI() {
     
     setupEffectKnob('delayMixKnob', (value) => {
         if (delay) delay.wet.value = value;
-    }, 0.8, (v) => `${Math.round(v * 100)}%`);
+    }, 0.5, (v) => `${Math.round(v * 100)}%`); // Default 50% wet
 
     setupEffectKnob('reverbDecayKnob', (value) => {
         if (reverb) reverb.decay = 0.1 + value * 9.9;
@@ -681,32 +662,29 @@ export async function initAudioUI() {
     setupEffectKnob('reverbSizeKnob', (value) => {
         if (reverb) reverb.preDelay = value * 0.1;
     }, 0, (v) => `${Math.round(v * 100)}%`);    
+    
     setupEffectToggle('distortion');
     setupEffectToggle('chorus');
     setupEffectToggle('delay');
     setupEffectToggle('reverb');
     setupEffectToggle('eq');
     
-    // Setup preset sample selector
     const presetSelect = document.getElementById('presetSampleSelect');
     if (presetSelect) {
         presetSelect.addEventListener('change', async (e) => {
             const preset = e.target.value;
-            console.log('Loading preset:', preset);
             await loadPresetSample(preset);
         });
-        
-        // Load default preset (halo)
         if (presetSelect.value) {
             loadPresetSample(presetSelect.value).catch(e => console.warn('Failed to load default preset:', e));
         }
     }
 
-const delayBtn = document.querySelector('[data-effect="delay"]');
-if (delayBtn) {
-    delayBtn.classList.add('active');
-    delayBtn.textContent = 'ON';
-}
+    const delayBtn = document.querySelector('[data-effect="delay"]');
+    if (delayBtn) {
+        delayBtn.classList.add('active');
+        delayBtn.textContent = 'ON';
+    }
     
     console.log('✅ Audio UI initialized');
 }

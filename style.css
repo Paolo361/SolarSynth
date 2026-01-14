@@ -342,13 +342,12 @@
     flex-direction: column;
     gap: 8px;
     padding: 8px 0;
-    width: 490px;
-        /* width da sostituire con: 
-        width: 40%;       Si adatta allo spazio disponibile
-        min-width: 380px; Non diventa troppo piccola
-        max-width: 500px; Non diventa troppo grande
-        flex-shrink: 0;   Non schiacciarti se manca spazio
-        */
+    /*width: 490px;*/
+        width: 40%;       /*Si adatta allo spazio disponibile*/
+        min-width: 380px; 
+        max-width: 500px; 
+        flex-shrink: 0;   
+        
     flex-shrink: 0;
     align-content: stretch;
     box-sizing: border-box;
