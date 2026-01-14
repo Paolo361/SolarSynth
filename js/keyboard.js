@@ -3,7 +3,10 @@ export const SCALES = {
     naturalMinor: [0, 2, 3, 5, 7, 8, 10],
     majorPentatonic: [0, 2, 4, 7, 9],
     minorPentatonic: [0, 3, 5, 7, 10],
-    dorian: [0, 2, 3, 5, 7, 9, 10]
+    chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    none: [],
+    custom: []
+
 };
 
 export function getKeyIndexFromY(y) {
@@ -115,8 +118,29 @@ export function highlightKey(i) {
     const keyboard = document.getElementById('verticalKeyboard');
     if (!keyboard) return;
     const keys = keyboard.children;
-    if (i >= 0 && i < keys.length) {
-        keys[i].classList.toggle('selectedKey');
+    if (i < 0 || i >= keys.length) return;
+
+    const keyEl = keys[i];
+    const midi = keyEl.dataset && keyEl.dataset.midi ? parseInt(keyEl.dataset.midi, 10) : NaN;
+
+    const scaleSelect = document.getElementById('scaleSelect');
+    const scaleName = scaleSelect ? scaleSelect.value : '';
+    const rootNoteSelect = document.getElementById('rootNoteSelect');
+    const rootValue = rootNoteSelect ? (parseInt(rootNoteSelect.value, 10) || 0) : 0;
+
+    let isInScale = true;
+    if (scaleName && scaleName !== 'none' && scaleName !== 'custom' && SCALES[scaleName] && Number.isFinite(midi)) {
+        const pcNote = (midi + 12) % 12;
+        const pcRoot = (rootValue || 0) % 12;
+        const pcDiff = (pcNote - pcRoot + 12) % 12;
+        isInScale = SCALES[scaleName].includes(pcDiff);
+    }
+
+    keyEl.classList.toggle('selectedKey');
+
+    if (!isInScale && scaleSelect) {
+        scaleSelect.value = 'custom';
+        applyScaleToKeyboard();
     }
 }
 
@@ -131,34 +155,41 @@ export function applyScaleToKeyboard() {
     const scaleName = scaleSelect ? scaleSelect.value : '';
     
     const rootNoteSelect = document.getElementById('rootNoteSelect');
-    const rootValue = rootNoteSelect ? parseInt(rootNoteSelect.value) : 0;
-    
+    const rootValue = rootNoteSelect ? (parseInt(rootNoteSelect.value, 10) || 0) : 0;
+
     for (let i = 0; i < numKeys; i++) {
         keys[i].classList.remove('scaleKey');
-        keys[i].classList.remove('selectedKey');
         keys[i].style.pointerEvents = 'auto';
     }
-    
-    if (scaleName && SCALES[scaleName]) {
-        const intervals = SCALES[scaleName];
-        for (let i = 0; i < numKeys; i++) {
-            const midi = parseInt(keys[i].dataset.midi, 10);
-            if (isNaN(midi)) continue;
-            
-            const pcNote = (midi + 12) % 12;
-            const pcRoot = rootValue % 12;
-            const pcDiff = (pcNote - pcRoot + 12) % 12;
-            
-            if (intervals.includes(pcDiff)) {
-                keys[i].classList.add('selectedKey');
-                keys[i].classList.add('scaleKey');
-            } else {
-                keys[i].style.pointerEvents = 'none';
-            }
-        }
-    } else {
-        for (let i = 0; i < numKeys; i++) {
+
+    if (scaleName === 'custom') {
+        return;
+    }
+
+    for (let i = 0; i < numKeys; i++) {
+        keys[i].classList.remove('selectedKey');
+    }
+
+    if (!scaleName || !SCALES[scaleName]) {
+        return;
+    }
+
+    if (scaleName === 'none') {
+        return;
+    }
+
+    const intervals = SCALES[scaleName];
+    for (let i = 0; i < numKeys; i++) {
+        const midi = parseInt(keys[i].dataset.midi, 10);
+        if (isNaN(midi)) continue;
+        
+        const pcNote = (midi + 12) % 12;
+        const pcRoot = rootValue % 12;
+        const pcDiff = (pcNote - pcRoot + 12) % 12;
+        
+        if (intervals.includes(pcDiff)) {
             keys[i].classList.add('selectedKey');
+            keys[i].classList.add('scaleKey');
         }
     }
 }
