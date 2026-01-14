@@ -476,9 +476,9 @@ export function initCharts() {
     chartDens = createChart("chartDens", "orange");
     chartVel = createChart("chartVel", "green");
     
-    chartTemp.data.datasets[0].label = "Temperatura";
-    chartDens.data.datasets[0].label = "Densità (protons/cm^3)";
-    chartVel.data.datasets[0].label = "Velocità (km/s)";
+    chartTemp.data.datasets[0].label = "Temperature (K)";
+    chartDens.data.datasets[0].label = "Density (protons/cm^3)";
+    chartVel.data.datasets[0].label = "Speed (km/s)";
     
     window.chartTemp = chartTemp;
     window.chartDens = chartDens;
@@ -744,6 +744,13 @@ export function stopTransport() {
         clearInterval(highlightTimer);
     }
     highlightTimer = null;
+
+        // Ensure any MIDI note playing from transport is stopped
+    import('./midi.js').then(mod => {
+        if (mod && typeof mod.panicMidi === 'function') {
+            mod.panicMidi();
+        }
+    }).catch(() => {});
 }
 
 export function resetTransport() {

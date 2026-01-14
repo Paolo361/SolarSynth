@@ -35,14 +35,22 @@ export function startSpectrumLoop() {
             return;
         }
         
-        if (spectrumCanvas.width !== spectrumCanvas.clientWidth || spectrumCanvas.height !== spectrumCanvas.clientHeight) {
-            spectrumCanvas.width = spectrumCanvas.clientWidth;
-            spectrumCanvas.height = spectrumCanvas.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        const rect = spectrumCanvas.getBoundingClientRect();
+        const logicalWidth = rect.width;
+        const logicalHeight = rect.height;
+        const targetWidth = Math.round(logicalWidth * dpr);
+        const targetHeight = Math.round(logicalHeight * dpr);
+
+        if (spectrumCanvas.width !== targetWidth || spectrumCanvas.height !== targetHeight) {
+            spectrumCanvas.width = targetWidth;
+            spectrumCanvas.height = targetHeight;
+            spectrumCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
         
         const values = fftAnalyserRef.getValue();
-        const width = spectrumCanvas.width;
-        const height = spectrumCanvas.height;
+        const width = logicalWidth;
+        const height = logicalHeight;
         const sampleRate = 44100;
         const nyquist = sampleRate / 2;
         
