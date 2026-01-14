@@ -3,7 +3,7 @@
 
 **Solar Synth** è un'applicazione web interattiva che trasforma i dati del vento solare (velocità, densità e temperatura) forniti dalla NOAA in musica in tempo reale. Il progetto combina la visualizzazione dei dati scientifici con la sintesi sonora, permettendo all'utente di "ascoltare" il comportamento della nostra stella.
 
-**Live Demo:** [Inseriere qui il link Netlify]
+**Live Demo:** https://solarsynth.netlify.app/
 
 
 ## Guida Rapida
