@@ -586,6 +586,23 @@
     border-radius: 8px;
     padding: 6px;
     box-sizing: border-box;
+    position: relative;
+}
+
+.random-dice-btn {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    background: transparent;
+    color: #64748b;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px;
+}
+
+.random-dice-btn:hover {
+    color: #3b82f6;
 }
 
 .effects-title {
@@ -1336,29 +1353,23 @@
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
-/* --- INIZIO FIX IMPAGINAZIONE --- */
-
-/* 1. SICUREZZA: Sblocca lo scroll ovunque */
-/* Se il contenuto non ci sta, DEVE comparire la barra laterale */
+/*
+FIX SCREENS RESOLUTIONS
+*/
 html, body {
-    overflow-y: auto !important; /* Forza lo scroll verticale */
-    overflow-x: hidden; /* Evita scroll orizzontale inutile */
+    overflow-y: auto !important;
+    overflow-x: hidden;
     height: auto !important;
 }
 
 .main-box {
-    /* Rimuove il "lucchetto" all'altezza dello schermo */
     max-height: none !important; 
     height: auto !important;
     overflow: visible !important;
-    /* Un po' di spazio sotto per non tagliare l'ultimo pezzo */
     margin-bottom: 40px !important; 
 }
 
 
-
-/* 3. FLUIDITÀ COLONNA DESTRA */
-/* Evita che la colonna destra rimanga rigida a 490px se non c'è spazio */
 .right-section {
     width: 40% !important;
     min-width: 380px !important;
@@ -1366,8 +1377,6 @@ html, body {
     flex-basis: auto !important;
 }
 
-/* 4. RIMPICCIOLIMENTO GRAFICI (Opzionale ma utile) */
-/* Se lo schermo è basso, riduce leggermente l'altezza dei grafici per guadagnare spazio */
 @media screen and (max-height: 800px) {
     .top-charts canvas {
         height: 70px !important;
@@ -1380,4 +1389,295 @@ html, body {
     }
 }
 
-/* --- FINE FIX --- */
+
+/* ============================================================
+   TUTORIAL SYSTEM - Info Button & Overlay
+============================================================ */
+
+.info-button {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.info-button:hover svg circle {
+    stroke: #f59e0b;
+    filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.6));
+}
+
+.info-button:hover svg text {
+    fill: #f59e0b;
+}
+
+.info-button:active {
+    transform: scale(0.95);
+}
+
+/* Tutorial Overlay */
+#tutorialOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.75);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+    will-change: opacity;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Tutorial Modal */
+.tutorial-modal {
+    position: relative;
+    background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+    border: 2px solid #fbbf24;
+    border-radius: 8px;
+    width: 600px;
+    height: 600px;
+    max-width: 600px;
+    padding: 40px;
+    box-shadow: 
+        0 0 30px rgba(251, 191, 36, 0.3),
+        inset 0 0 20px rgba(251, 191, 36, 0.05);
+    animation: slideUp 0.25s ease-out;
+    overflow: hidden;
+    will-change: transform, opacity;
+}
+
+.tutorial-modal::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-20deg);
+    width: 150%;
+    height: 150%;
+    background-image: url('assets/logo-cropped.svg');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.08;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.tutorial-modal-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    height: 100%;
+}
+
+.tutorial-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fbbf24;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 0;
+    text-shadow: 0 0 10px rgba(251, 191, 36, 0.5);
+}
+
+.tutorial-text {
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    font-weight: 400;
+    color: #e2e8f0;
+    line-height: 1.8;
+    letter-spacing: 0.5px;
+    margin: 0;
+    min-height: 80px;
+    word-wrap: break-word;
+}
+
+.tutorial-buttons-row {
+    display: flex;
+    gap: 15px;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    position: absolute;
+    bottom: -10px;
+    left: 0;
+    right: 0;
+    padding: 25px;
+}
+
+.tutorial-buttons-row .tutorial-button-quit {
+    margin-right: auto;
+}
+
+.tutorial-buttons-row .tutorial-button-back,
+.tutorial-buttons-row .tutorial-button-next,
+.tutorial-buttons-row .tutorial-button-close {
+    margin-left: 0;
+}
+
+.tutorial-button {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border: 2px solid #fbbf24;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 1px;
+    min-width: 100px;
+    text-align: center;
+}
+
+.tutorial-button-next,
+.tutorial-button-close {
+    background-color: #fbbf24;
+    color: #000;
+}
+
+.tutorial-button-next:hover,
+.tutorial-button-close:hover {
+    background-color: #f59e0b;
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
+    transform: translateY(-2px);
+}
+
+.tutorial-button-next:active,
+.tutorial-button-close:active {
+    transform: translateY(1px);
+}
+
+.tutorial-button-back {
+    background-color: transparent;
+    color: #fbbf24;
+    border-color: #fbbf24;
+}
+
+.tutorial-button-back:hover {
+    background-color: rgba(251, 191, 36, 0.1);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);
+}
+
+.tutorial-button-back:active {
+    background-color: rgba(251, 191, 36, 0.2);
+}
+
+.tutorial-button-quit {
+    background-color: transparent;
+    color: #e2e8f0;
+    border-color: #e2e8f0;
+    border-width: 2px;
+}
+
+.tutorial-button-quit:hover {
+    background-color: rgba(226, 232, 240, 0.1);
+    box-shadow: 0 0 10px rgba(226, 232, 240, 0.4);
+    border-color: #fff;
+    color: #fff;
+}
+
+.tutorial-button-quit:active {
+    background-color: rgba(226, 232, 240, 0.2);
+    transform: translateY(1px);
+}
+
+/* ============================================================
+   EASTER EGG - Logo animation
+============================================================ */
+#easterEggLogo {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0;
+}
+
+@keyframes easterEggFade {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
+#easterEggLogo.active {
+    animation: easterEggFade 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ============================================================
+   TUTORIAL INVITE PULSE - Animation to draw attention to info button
+============================================================ */
+@keyframes svgCirclePulse {
+    0% {
+        stroke: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+    50% {
+        stroke: #ffffff;
+        filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9));
+    }
+    100% {
+        stroke: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+}
+
+@keyframes svgTextPulse {
+    0% {
+        fill: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+    50% {
+        fill: #ffffff;
+        filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9));
+    }
+    100% {
+        fill: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+}
+
+.tutorial-invite-pulse svg circle {
+    animation: svgCirclePulse 1.5s ease-in-out infinite;
+    animation-delay: 0s;
+}
+
+.tutorial-invite-pulse svg text {
+    animation: svgTextPulse 1.5s ease-in-out infinite;
+    animation-delay: 0s;
+}

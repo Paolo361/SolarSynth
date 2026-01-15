@@ -173,6 +173,9 @@
 
     <!-- BOTTOM SECTION (EFFECTS): dedicated row with 4 modules -->
     <section class="effects-section" aria-label="Effects">
+        <button id="randomizeEffectsBtn" class="random-dice-btn" aria-label="Randomize Effects">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><circle cx="16" cy="8" r="1.5"></circle><circle cx="8" cy="16" r="1.5"></circle><circle cx="8" cy="8" r="1.5"></circle><circle cx="16" cy="16" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle></svg>
+        </button>
         <div class="effects-title">EFFECTS</div>
         <div class="effects-panel-container">
         <!-- Distortion Effect -->
@@ -282,6 +285,12 @@
 <!-- Context Menu per rimuovere il controllo del grafico -->
 <div id="knobContextMenu" class="context-menu" style="display: none;">
     <div class="context-menu-item" id="removeControl">Remove Control</div>
+</div>
+
+<!-- Context Menu per il Filter Spectrum -->
+<div id="filterContextMenu" class="context-menu" style="display: none;">
+    <div class="context-menu-item" id="removeHPControl">Remove control from High Pass</div>
+    <div class="context-menu-item" id="removeLPControl">Remove control from Low Pass</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/tone@14.8.39/build/Tone.min.js"></script>

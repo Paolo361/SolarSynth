@@ -134,6 +134,15 @@ export function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatt
         }
     };
 
+    // Expose setter for external control (e.g., randomize)
+    window.setKnobValue = window.setKnobValue || {};
+    window.setKnobValue[knobId] = (newValue) => {
+        currentValue = Math.max(0, Math.min(1, newValue));
+        updateKnobRotation();
+        updateValueDisplay();
+        if (callback) callback(currentValue);
+    };
+
     const onMouseDown = (e) => {
         isDragging = true;
         startY = e.clientY;
@@ -275,6 +284,25 @@ export function initUI() {
                 metronomeBtn.style.background = '';
                 metronomeBtn.style.borderColor = '';
             }
+        });
+    }
+
+    // Randomize effects button
+    const randomBtn = document.getElementById('randomizeEffectsBtn');
+    if (randomBtn) {
+        const targetKnobs = [
+            'distortionDriveKnob', 'distortionToneKnob', 'distortionMixKnob',
+            'chorusDepthKnob', 'chorusRateKnob', 'chorusMixKnob',
+            'delayTimeKnob', 'delayFeedbackKnob', 'delayMixKnob',
+            'reverbDecayKnob', 'reverbSizeKnob', 'reverbMixKnob'
+        ];
+        randomBtn.addEventListener('click', () => {
+            if (!window.setKnobValue) return;
+            targetKnobs.forEach(id => {
+                if (window.setKnobValue[id]) {
+                    window.setKnobValue[id](Math.random());
+                }
+            });
         });
     }
     
@@ -734,25 +762,39 @@ export function setupKnobDragDrop() {
             }
         });
 
-        // Right-click to remove filter handle binding
+        // Right-click to show filter context menu
         spectrumCanvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            const filterContextMenu = document.getElementById('filterContextMenu');
+            if (!filterContextMenu) return;
             
-            const rect = spectrumCanvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const canvasWidth = spectrumCanvas.width;
-            const isHP = x < canvasWidth / 2;
-            
-            window.filterHandleAssignments = window.filterHandleAssignments || {};
-            
-            if (isHP && window.filterHandleAssignments.hp) {
+            filterContextMenu.style.left = e.pageX + 'px';
+            filterContextMenu.style.top = e.pageY + 'px';
+            filterContextMenu.style.display = 'block';
+        });
+        
+        // Filter context menu item handlers
+        const removeHPControl = document.getElementById('removeHPControl');
+        const removeLPControl = document.getElementById('removeLPControl');
+        const filterContextMenu = document.getElementById('filterContextMenu');
+        
+        if (removeHPControl) {
+            removeHPControl.addEventListener('click', () => {
+                window.filterHandleAssignments = window.filterHandleAssignments || {};
                 delete window.filterHandleAssignments.hp;
                 resetFilterHandleColor('hp');
-            } else if (!isHP && window.filterHandleAssignments.lp) {
+                if (filterContextMenu) filterContextMenu.style.display = 'none';
+            });
+        }
+        
+        if (removeLPControl) {
+            removeLPControl.addEventListener('click', () => {
+                window.filterHandleAssignments = window.filterHandleAssignments || {};
                 delete window.filterHandleAssignments.lp;
                 resetFilterHandleColor('lp');
-            }
-        });
+                if (filterContextMenu) filterContextMenu.style.display = 'none';
+            });
+        }
     }
 
     function updateFilterHandleColor(handleType, chartSource) {
@@ -806,8 +848,13 @@ export function setupKnobDragDrop() {
 
     // Close context menu on click elsewhere
     document.addEventListener('click', (e) => {
+        const contextMenu = document.getElementById('knobContextMenu');
+        const filterContextMenu = document.getElementById('filterContextMenu');
         if (contextMenu && !contextMenu.contains(e.target) && !e.target.closest('.effect-knob, .knob')) {
             contextMenu.style.display = 'none';
+        }
+        if (filterContextMenu && !filterContextMenu.contains(e.target) && e.target.id !== 'spectrumCanvas') {
+            filterContextMenu.style.display = 'none';
         }
     });
 

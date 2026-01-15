@@ -38,6 +38,7 @@ export let metronomeVolume = null;
 export let reverb = null;
 export let distortion = null;
 export let chorus = null;
+let chorusStarted = false;
 export let delay = null;
 export let distortionDriveValue = 0;
 export let distortionToneFactor = 1;
@@ -82,13 +83,13 @@ export const EQ_MAX_Q = 20;
 export const EQ_VALID_ROLLOFFS = [-12, -24, -48, -96];
 
 export const PRESET_SAMPLES = {
-    afterglow: 'suoni/afterglow.wav',
-    ember: 'suoni/ember.wav',
-    kelvin: 'suoni/kelvin.wav',
-    lumen: 'suoni/lumen.wav',
-    parsec: 'suoni/parsec.wav',
-    photon: 'suoni/photon.wav',
-    halo: 'suoni/halo.wav'
+    afterglow: 'Sounds/afterglow.wav',
+    ember: 'Sounds/ember.wav',
+    kelvin: 'Sounds/kelvin.wav',
+    lumen: 'Sounds/lumen.wav',
+    parsec: 'Sounds/parsec.wav',
+    photon: 'Sounds/photon.wav',
+    halo: 'Sounds/halo.wav'
 };
 
 // Setter per sincronizzare audioState con variabili locali
@@ -185,6 +186,7 @@ export function setMasterVolume(volumeDb) {
     if (masterVolume) masterVolume.volume.rampTo(clamped, 0.1);
 }
 
+
 export function initMetronome() {
     try {
         metronomeVolume = new Tone.Volume(-10).toDestination();
@@ -207,7 +209,7 @@ export function initMetronome() {
                 const position = Tone.Transport.position.split(':');
                 const quarter = parseInt(position[1]);
 
-                if (quarter % 2 === 0) {
+                if (quarter === 0) {
                     metronomeOsc.triggerAttackRelease('G6', '32n', time, 1); 
                 } else {
                     metronomeOsc.triggerAttackRelease('C6', '32n', time, 0.6);
@@ -392,9 +394,9 @@ export function initializeAudioChain() {
         reverb = new Tone.Reverb({ decay: 1.5, wet: 0 });
         distortion = new Tone.Distortion({ distortion: 0, wet: 0 });
         chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0 });
-        try { chorus.start(); } catch (e) { console.warn('Chorus start failed', e); }
-        // DELAY: Wet a 0.5 di default
-        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0.5 });
+        // Defer starting the chorus LFO to ensure we do it only once (see ensureChorusStarted).
+        // DELAY: Inizializzato con wet: 0 (spento)
+        delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.5, wet: 0 });
         
         if (!eqHighpassFilter) {
             eqHighpassFilter = new Tone.Filter({
@@ -571,6 +573,15 @@ function setupEffectToggle(effectName) {
     const toggleBtns = document.querySelectorAll(`[data-effect="${effectName}"]`);
     
     toggleBtns.forEach(btn => {
+        // Inizializza lo stato visuale del pulsante (tutti gli effetti partono spenti)
+        if (effectName === 'eq') {
+            btn.textContent = 'OFF';
+            btn.classList.remove('active');
+        } else {
+            btn.textContent = 'OFF';
+            btn.classList.remove('active');
+        }
+        
         btn.addEventListener('click', () => {
             if (effectName === 'eq') {
                 eqEnabled = !eqEnabled;
@@ -656,9 +667,10 @@ function smoothWet(node, target, ramp = 0.05) {
 
 function ensureChorusStarted() {
     try {
-        if (chorus && typeof chorus.start === 'function' && chorus.state !== 'started') {
-            chorus.start();
-        }
+        if (!chorus || typeof chorus.start !== 'function') return;
+        if (chorusStarted) return;
+        chorus.start();
+        chorusStarted = true;
     } catch (e) {
         console.warn('Unable to start chorus LFO', e);
     }
@@ -670,7 +682,8 @@ export async function initAudioUI() {
     syncAudioState();
     
     if (outputMeter) {
-        startDbMeterLoop();
+        console.log('Starting dB meter loop');
+        startDbMeterLoop(outputMeter);
     }
     
     attachVolumeSlider();
@@ -684,16 +697,7 @@ export async function initAudioUI() {
     setupEffectToggle('reverb');
     setupEffectToggle('eq');
 
-    // ATTIVA IL DELAY DI DEFAULT (VISUALMENTE)
-    // Questo deve avvenire PRIMA di impostare il delayMixKnob
-    const delayBtn = document.querySelector('[data-effect="delay"]');
-    if (delayBtn) {
-        delayBtn.classList.add('active');
-        delayBtn.textContent = 'ON';
-    }
-    
     // ORA CONFIGURIAMO I KNOB
-    // Poiché delayBtn è già .active, il delayMixKnob applicherà correttamente il wet a 0.5.
 
     setupEffectKnob('distortionDriveKnob', (value) => {
         distortionDriveValue = value;
@@ -724,12 +728,12 @@ export async function initAudioUI() {
     setupEffectKnob('chorusDepthKnob', (value) => {
         ensureChorusStarted();
         if (chorus) chorus.depth = value;
-    }, 0.7, (v) => `${Math.round(v * 100)}%`);
+    }, 0, (v) => `${Math.round(v * 100)}%`);
     
     setupEffectKnob('chorusRateKnob', (value) => {
         ensureChorusStarted();
         if (chorus) chorus.frequency.value = 0.5 + value * 4.5;
-    }, 0.2, (v) => `${(0.5 + v * 4.5).toFixed(2)} Hz`);
+    }, 0, (v) => `${(0.5 + v * 4.5).toFixed(2)} Hz`);
     
     setupEffectKnob('chorusMixKnob', (value) => {
         if (chorus) {
@@ -747,7 +751,7 @@ export async function initAudioUI() {
         delayTimePending = 0.01 + value * 0.99;
         if (delayTimeTimer) clearTimeout(delayTimeTimer);
         delayTimeTimer = setTimeout(flushDelayTimePending, 120);
-    }, 0.25, (v) => {
+    }, 0, (v) => {
         const raw = 0.01 + v * 0.99;
         const quant = Math.round((raw * 1000) / 10) * 10 / 1000;
         return `${(quant * 1000).toFixed(0)} ms`;
@@ -755,7 +759,7 @@ export async function initAudioUI() {
     
     setupEffectKnob('delayFeedbackKnob', (value) => {
         if (delay) delay.feedback.value = value * 0.95;
-    }, 0.5, (v) => `${Math.round(v * 100)}%`);
+    }, 0, (v) => `${Math.round(v * 100)}%`);
     
     setupEffectKnob('delayMixKnob', (value) => {
         if (delay) {
@@ -765,13 +769,13 @@ export async function initAudioUI() {
                 delay.wet.value = value;
             }
         }
-    }, 0.5, (v) => `${Math.round(v * 100)}%`); // Default 50% wet
+    }, 0, (v) => `${Math.round(v * 100)}%`);
 
     document.addEventListener('mouseup', flushDelayTimePending);
 
     setupEffectKnob('reverbDecayKnob', (value) => {
         if (reverb) reverb.decay = 0.1 + value * 9.9;
-    }, 0.15, (v) => `${(0.1 + v * 9.9).toFixed(1)}s`);
+    }, 0, (v) => `${(0.1 + v * 9.9).toFixed(1)}s`);
     
     setupEffectKnob('reverbMixKnob', (value) => {
         if (reverb) {
