@@ -1353,29 +1353,23 @@
     text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
-/* --- INIZIO FIX IMPAGINAZIONE --- */
-
-/* 1. SICUREZZA: Sblocca lo scroll ovunque */
-/* Se il contenuto non ci sta, DEVE comparire la barra laterale */
+/*
+FIX SCREENS RESOLUTIONS
+*/
 html, body {
-    overflow-y: auto !important; /* Forza lo scroll verticale */
-    overflow-x: hidden; /* Evita scroll orizzontale inutile */
+    overflow-y: auto !important;
+    overflow-x: hidden;
     height: auto !important;
 }
 
 .main-box {
-    /* Rimuove il "lucchetto" all'altezza dello schermo */
     max-height: none !important; 
     height: auto !important;
     overflow: visible !important;
-    /* Un po' di spazio sotto per non tagliare l'ultimo pezzo */
     margin-bottom: 40px !important; 
 }
 
 
-
-/* 3. FLUIDITÀ COLONNA DESTRA */
-/* Evita che la colonna destra rimanga rigida a 490px se non c'è spazio */
 .right-section {
     width: 40% !important;
     min-width: 380px !important;
@@ -1383,8 +1377,6 @@ html, body {
     flex-basis: auto !important;
 }
 
-/* 4. RIMPICCIOLIMENTO GRAFICI (Opzionale ma utile) */
-/* Se lo schermo è basso, riduce leggermente l'altezza dei grafici per guadagnare spazio */
 @media screen and (max-height: 800px) {
     .top-charts canvas {
         height: 70px !important;
@@ -1397,7 +1389,6 @@ html, body {
     }
 }
 
-/* --- FINE FIX --- */
 
 /* ============================================================
    TUTORIAL SYSTEM - Info Button & Overlay

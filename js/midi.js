@@ -4,46 +4,50 @@ export let currentMidiNote = null;
 
 export async function initMidiAccess() {
     try {
-        const access = await navigator.requestMIDIAccess();
         const midiAccess = await navigator.requestMIDIAccess({ sysex: true });
         
         const selectEl = document.getElementById('midiOutputSelect');
         const statusEl = document.getElementById('midiStatus');
 
         const updateMidiList = () => {
+            if (!selectEl) return;
+            
             const currentSelection = selectEl.value;
             
-            selectEl.innerHTML = '<option value="">-- Nessuno --</option>';
+            selectEl.innerHTML = '<option value="">None</option>';
             
-            const outputs = midiAccess.outputs.values();
-            let hasOutputs = false;
+            const outputs = Array.from(midiAccess.outputs.values());
+            let hasOutputs = outputs.length > 0;
             let deviceFoundAgain = false;
 
-            for (let output of outputs) {
-                hasOutputs = true;
-
+            outputs.forEach(output => {
                 const option = document.createElement('option');
                 option.value = output.id;
-                option.textContent = output.name;
+                option.textContent = output.name || `MIDI Output ${output.id}`;
                 selectEl.appendChild(option);
 
                 if (output.id === currentSelection) {
                     option.selected = true;
                     deviceFoundAgain = true;
                 }
-            }
+            });
 
             if (!hasOutputs) {
                 if (statusEl) statusEl.textContent = 'MIDI: nessun dispositivo trovato';
+                console.warn('⚠️ Nessun dispositivo MIDI output trovato');
             } else if (!deviceFoundAgain && currentSelection !== "") {
                 if (statusEl) statusEl.textContent = 'MIDI: Dispositivo scollegato';
                 midiOutput = null;
+            } else if (hasOutputs) {
+                if (statusEl) statusEl.textContent = `MIDI: ${outputs.length} dispositivo(i) rilevato(i)`;
+                console.log('✅ Dispositivi MIDI trovati:', outputs.map(o => o.name || o.id));
             }
         };
 
         updateMidiList();
 
         midiAccess.onstatechange = (e) => {
+            console.log('MIDI state change event:', e);
             updateMidiList();
         };
         
