@@ -586,6 +586,23 @@
     border-radius: 8px;
     padding: 6px;
     box-sizing: border-box;
+    position: relative;
+}
+
+.random-dice-btn {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    background: transparent;
+    color: #64748b;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 4px;
+}
+
+.random-dice-btn:hover {
+    color: #3b82f6;
 }
 
 .effects-title {
@@ -1398,19 +1415,6 @@ html, body {
     justify-content: center;
     transition: all 0.2s ease;
     padding: 0;
-    animation: glowingPulse 2s ease-in-out infinite;
-}
-
-@keyframes glowingPulse {
-    0% {
-        filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4));
-    }
-    50% {
-        filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.8)) drop-shadow(0 0 24px rgba(251, 191, 36, 0.5));
-    }
-    100% {
-        filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.4));
-    }
 }
 
 .info-button:hover svg circle {
@@ -1474,7 +1478,7 @@ html, body {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) rotate(-20deg);
     width: 150%;
     height: 150%;
     background-image: url('assets/logo-cropped.svg');
@@ -1536,7 +1540,7 @@ html, body {
     align-items: center;
     margin-top: auto;
     position: absolute;
-    bottom: 0;
+    bottom: -10px;
     left: 0;
     right: 0;
     padding: 25px;
@@ -1642,4 +1646,47 @@ html, body {
 
 #easterEggLogo.active {
     animation: easterEggFade 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ============================================================
+   TUTORIAL INVITE PULSE - Animation to draw attention to info button
+============================================================ */
+@keyframes svgCirclePulse {
+    0% {
+        stroke: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+    50% {
+        stroke: #ffffff;
+        filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9));
+    }
+    100% {
+        stroke: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+}
+
+@keyframes svgTextPulse {
+    0% {
+        fill: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+    50% {
+        fill: #ffffff;
+        filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.9));
+    }
+    100% {
+        fill: #fbbf24;
+        filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.6));
+    }
+}
+
+.tutorial-invite-pulse svg circle {
+    animation: svgCirclePulse 1.5s ease-in-out infinite;
+    animation-delay: 0s;
+}
+
+.tutorial-invite-pulse svg text {
+    animation: svgTextPulse 1.5s ease-in-out infinite;
+    animation-delay: 0s;
 }

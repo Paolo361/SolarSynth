@@ -134,6 +134,15 @@ export function setupEffectKnob(knobId, callback, defaultValue = 0, valueFormatt
         }
     };
 
+    // Expose setter for external control (e.g., randomize)
+    window.setKnobValue = window.setKnobValue || {};
+    window.setKnobValue[knobId] = (newValue) => {
+        currentValue = Math.max(0, Math.min(1, newValue));
+        updateKnobRotation();
+        updateValueDisplay();
+        if (callback) callback(currentValue);
+    };
+
     const onMouseDown = (e) => {
         isDragging = true;
         startY = e.clientY;
@@ -275,6 +284,25 @@ export function initUI() {
                 metronomeBtn.style.background = '';
                 metronomeBtn.style.borderColor = '';
             }
+        });
+    }
+
+    // Randomize effects button
+    const randomBtn = document.getElementById('randomizeEffectsBtn');
+    if (randomBtn) {
+        const targetKnobs = [
+            'distortionDriveKnob', 'distortionToneKnob', 'distortionMixKnob',
+            'chorusDepthKnob', 'chorusRateKnob', 'chorusMixKnob',
+            'delayTimeKnob', 'delayFeedbackKnob', 'delayMixKnob',
+            'reverbDecayKnob', 'reverbSizeKnob', 'reverbMixKnob'
+        ];
+        randomBtn.addEventListener('click', () => {
+            if (!window.setKnobValue) return;
+            targetKnobs.forEach(id => {
+                if (window.setKnobValue[id]) {
+                    window.setKnobValue[id](Math.random());
+                }
+            });
         });
     }
     

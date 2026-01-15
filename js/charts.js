@@ -1,5 +1,8 @@
 import { resolveColorToRgba, COLOR_MAP, interpolateLinear } from './utils.js';
 
+// Track last data timestamp for new data detection
+let lastDataTimestamp = 0;
+
 export const lineShadowPlugin = {
     id: 'lineShadow',
     beforeDatasetDraw(chart, args, options) {
@@ -171,8 +174,42 @@ export const dataPointLinesPlugin = {
     }
 };
 
+export const newPointPulsePlugin = {
+    id: 'newPointPulse',
+    afterDraw(chart) {
+        if (!chart.pulseEffect) return;
+        
+        const ctx = chart.ctx;
+        const elapsed = Date.now() - chart.pulseEffect.startTime;
+        const duration = 3000; // 3 seconds
+        
+        if (elapsed >= duration) {
+            chart.pulseEffect = null;
+            return;
+        }
+        
+        const progress = elapsed / duration;
+        const maxRadius = 60;
+        const radius = progress * maxRadius;
+        const alpha = 1 - progress;
+        
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(chart.pulseEffect.x, chart.pulseEffect.y, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(251, 191, 36, ${alpha * 0.8})`;
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = `rgba(251, 191, 36, ${alpha})`;
+        ctx.stroke();
+        ctx.restore();
+        
+        // Continue animation
+        requestAnimationFrame(() => chart.draw());
+    }
+};
+
 export function registerChartPlugins() {
-    Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, dataPointLinesPlugin);
+    Chart.register(lineShadowPlugin, verticalLinePlugin, horizontalSectionsPlugin, dataPointLinesPlugin, newPointPulsePlugin);
 }
 
 export function createChart(canvasId, color, isPreview = false) {
@@ -409,6 +446,33 @@ export async function updateCharts() {
         window.originalDataVel = vel;
         window.originalDataYs = temp;
         
+        // Check for new data and trigger pulse effect
+        if (xs.length > 0) {
+            const currentLatestTime = xs[xs.length - 1];
+            if (lastDataTimestamp > 0 && currentLatestTime > lastDataTimestamp) {
+                // New data detected! Trigger pulse on preview chart
+                if (window.chartPreview) {
+                    // Wait for chart update to complete before getting coordinates
+                    setTimeout(() => {
+                        const meta = window.chartPreview.getDatasetMeta(0);
+                        if (meta && meta.data && meta.data.length > 0) {
+                            const lastPt = meta.data[meta.data.length - 1];
+                            if (lastPt && lastPt.x !== undefined && lastPt.y !== undefined) {
+                                window.chartPreview.pulseEffect = {
+                                    x: lastPt.x,
+                                    y: lastPt.y,
+                                    startTime: Date.now()
+                                };
+                                window.chartPreview.draw();
+                                console.log('✨ New data pulse triggered');
+                            }
+                        }
+                    }, 100);
+                }
+            }
+            lastDataTimestamp = currentLatestTime;
+        }
+        
         const NUM = 300;
         let minX = Math.min(...xs);
         let maxX = Math.max(...xs);
@@ -490,7 +554,13 @@ export function initCharts() {
     ensurePreviewChart();
     updateCharts();
     
-    console.log('✅ Charts initialized');
+    // Update charts every 15 seconds
+    setInterval(() => {
+        console.log('🔄 Auto-updating charts...');
+        updateCharts();
+    }, 15000);
+    
+    console.log('✅ Charts initialized with auto-update');
 }
 
 function setupChartBoxListeners() {

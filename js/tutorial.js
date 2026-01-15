@@ -48,7 +48,7 @@ class TutorialManager {
                 title: "Preview Chart",
                 text: `
         <p style="margin-bottom: 20px; font-size: 15px; line-height: 1.5;">
-            Your selected parameter is now active on the <span style="color: #fbbf24; font-weight: 700;">Preview Chart</span>. This monitor displays data from the past hour, with a new point appearing every 2-4 minutes. Each dot triggers a musical note: the higher the value, the higher the pitch!
+            Your selected parameter is now active on the <span style="color: #fbbf24; font-weight: 700;">Preview Chart</span>. This monitor displays data from the past hour, with a new point appearing every 2-4 minutes.Each dot triggers a musical note: the higher the value, the higher the pitch! A glowing pulse signals the arrival of each new data point. 
         </p>
         
         <div style="display: flex; justify-content: center; width: 100%; margin-top: 10px;">
@@ -96,7 +96,7 @@ class TutorialManager {
                 title: "effects",
                 text: `
         <p style="margin-bottom: 20px; font-size: 15px; line-height: 1.5;">
-            Shape your tone using the provided <span style="color: #fbbf24; font-weight: 700;">Effects</span> and <span style="color: #fbbf24; font-weight: 700;">Filter</span>. Drag the handles to tune cutoff frequencies and scroll with the mouse wheel to adjust the filter's slope. Double click any knob to reset it to default.
+            Shape your tone using the provided <span style="color: #fbbf24; font-weight: 700;">Effects</span> and <span style="color: #fbbf24; font-weight: 700;">Filter</span>. Drag the handles to tune cutoff frequencies and scroll with the mouse wheel to adjust the filter's slope. Click the <span style="color: #3b82f6; font-weight: 700;">dice</span> icon in the effects panel to randomize settings. Double click any knob to reset it to default.
             <br><br>
             <span style="color: #fb923c; font-weight: 700;">Solar Automation</span>: Drag and drop any of the three graphs onto an effect knob. The live solar data will assume control, modulating your sound in real-time! Right click the knob to remove the automation.
             <br><br>
@@ -181,11 +181,20 @@ class TutorialManager {
         this.closeBtn = document.getElementById('tutorialCloseBtn');
         this.quitBtn = document.getElementById('tutorialQuitBtn');
         this.infoBtn = document.getElementById('infoBtn');
+        
+        // Add the pulse class on startup
+        if (this.infoBtn) {
+            this.infoBtn.classList.add('tutorial-invite-pulse');
+        }
     }
     
     attachEventListeners() {
         // Info button opens tutorial
-        this.infoBtn.addEventListener('click', () => this.open());
+        this.infoBtn.addEventListener('click', () => {
+            // Remove pulse permanently on first click
+            this.infoBtn.classList.remove('tutorial-invite-pulse');
+            this.open();
+        });
         
         // Next button
         this.nextBtn.addEventListener('click', () => this.next());
@@ -204,7 +213,13 @@ class TutorialManager {
             if (this.isOpen && e.code === 'Space' && !this.isTyping) {
                 e.stopImmediatePropagation();
                 e.preventDefault();
-                this.next();
+                // Check if we're on the last slide
+                const isLastSlide = this.currentSlideIndex === this.slides.length - 1;
+                if (isLastSlide) {
+                    this.close();
+                } else {
+                    this.next();
+                }
             }
             // ESC to quit tutorial
             if (this.isOpen && e.code === 'Escape') {
@@ -320,6 +335,8 @@ class TutorialManager {
             this.nextBtn.textContent = isFirstSlide 
                 ? 'NEXT (SPACEBAR)' 
                 : 'NEXT (SPACEBAR)';
+        } else {
+            this.closeBtn.textContent = 'CLOSE (SPACEBAR)';
         }
     }
     
