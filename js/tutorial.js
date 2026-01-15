@@ -21,7 +21,7 @@ class TutorialManager {
         <div style="display: flex; justify-content: center; width: 100%; margin-top: 10px;">
             <img src="assets/tutorial images/solarsynth.png" 
                  alt="Solar Synth Welcome" 
-                 style="width: 100%; height: auto; max-height: 250px; object-fit: contain; border-radius: 6px;">
+                 style="width: 100%; height: auto; object-fit: contain; border-radius: 6px;">
         </div>
         `,
                 buttons: ["NEXT"],
@@ -96,9 +96,9 @@ class TutorialManager {
                 title: "effects",
                 text: `
         <p style="margin-bottom: 20px; font-size: 15px; line-height: 1.5;">
-            Shape your tone using the provided <span style="color: #fbbf24; font-weight: 700;">Effects</span> and <span style="color: #fbbf24; font-weight: 700;">Filter</span>. 
+            Shape your tone using the provided <span style="color: #fbbf24; font-weight: 700;">Effects</span> and <span style="color: #fbbf24; font-weight: 700;">Filter</span>. Drag the handles to tune cutoff frequencies and scroll with the mouse wheel to adjust the filter's slope. Double click any knob to reset it to default.
             <br><br>
-            <span style="color: #fb923c; font-weight: 700;">Solar Automation</span>: Drag and drop any of the three graphs onto an effect knob. The live solar data will assume control, modulating your sound in real-time! 
+            <span style="color: #fb923c; font-weight: 700;">Solar Automation</span>: Drag and drop any of the three graphs onto an effect knob. The live solar data will assume control, modulating your sound in real-time! Right click the knob to remove the automation.
             <br><br>
             Finally press the <span style="color: #fb923c; font-weight: 700;">Record Button</span> to capture and save the Sun's performance.
         </p>

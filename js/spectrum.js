@@ -209,7 +209,7 @@ export function startSpectrumLoop() {
                     }
                     
                     const responseDb = 20 * Math.log10(Math.max(0.001, response));
-                    const y = height - ((responseDb + 50) / 50) * height;
+                    const y = height - ((responseDb + 50) / 50) * height * 0.80;
                     
                     if (isFirstPoint) {
                         spectrumCtx.moveTo(x, y);
@@ -220,6 +220,25 @@ export function startSpectrumLoop() {
                 }
                 spectrumCtx.stroke();
             }
+            
+            // Draw vertical dashed lines for cutoff frequencies
+            spectrumCtx.strokeStyle = 'rgba(251, 191, 36, 0.6)';
+            spectrumCtx.lineWidth = 2;
+            spectrumCtx.setLineDash([6, 4]);
+            
+            // Highpass cutoff line
+            spectrumCtx.beginPath();
+            spectrumCtx.moveTo(hpX, 0);
+            spectrumCtx.lineTo(hpX, height);
+            spectrumCtx.stroke();
+            
+            // Lowpass cutoff line
+            spectrumCtx.beginPath();
+            spectrumCtx.moveTo(lpX, 0);
+            spectrumCtx.lineTo(lpX, height);
+            spectrumCtx.stroke();
+            
+            spectrumCtx.setLineDash([]);
             
             // Draw filter handles with dynamic colors
             spectrumCtx.fillStyle = hpHandleColor;
@@ -238,6 +257,30 @@ export function startSpectrumLoop() {
             spectrumCtx.lineWidth = 2;
             spectrumCtx.stroke();
         }
+        
+        // Draw frequency labels at the bottom
+        const frequencyLabels = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+        const hzToPixelForLabel = (hz) => {
+            const log20 = Math.log(20);
+            const log20k = Math.log(20000);
+            const logHz = Math.log(hz);
+            return ((logHz - log20) / (log20k - log20)) * width;
+        };
+        
+        spectrumCtx.font = '8px "Space Mono", monospace';
+        spectrumCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        spectrumCtx.textAlign = 'center';
+        
+        frequencyLabels.forEach(freq => {
+            const x = hzToPixelForLabel(freq);
+            let label;
+            if (freq >= 1000) {
+                label = (freq / 1000).toFixed(freq >= 10000 ? 0 : 1) + 'k';
+            } else {
+                label = Math.round(freq).toString();
+            }
+            spectrumCtx.fillText(label, x, height - 2);
+        });
         
         spectrumAnimationId = requestAnimationFrame(loop);
     };

@@ -69,4 +69,46 @@ window.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {
         console.error('❌ Errore durante l\'inizializzazione:', e);
     }
+    
+    // Easter egg: press 's' to show logo
+    let easterEggLogo = null;
+    let easterEggActive = false;
+    
+    document.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 's' && !easterEggActive) {
+            easterEggActive = true;
+            
+            // Create logo element if it doesn't exist
+            if (!easterEggLogo) {
+                easterEggLogo = document.createElement('img');
+                easterEggLogo.id = 'easterEggLogo';
+                easterEggLogo.src = 'assets/logo.svg';
+                easterEggLogo.alt = 'Solar Synth';
+                document.body.appendChild(easterEggLogo);
+            }
+            
+            // Random size between 100px and 500px
+            const randomSize = Math.floor(Math.random() * 400) + 100;
+            easterEggLogo.style.width = randomSize + 'px';
+            easterEggLogo.style.height = randomSize + 'px';
+            
+            // Random position (accounting for logo size to keep it on screen)
+            const maxX = window.innerWidth - randomSize;
+            const maxY = window.innerHeight - randomSize;
+            const randomX = Math.max(0, Math.floor(Math.random() * maxX));
+            const randomY = Math.max(0, Math.floor(Math.random() * maxY));
+            easterEggLogo.style.left = randomX + 'px';
+            easterEggLogo.style.top = randomY + 'px';
+            
+            // Reset animation by removing and re-adding class
+            easterEggLogo.classList.remove('active');
+            void easterEggLogo.offsetWidth; // Force reflow
+            easterEggLogo.classList.add('active');
+            
+            // Reset flag after animation completes
+            setTimeout(() => {
+                easterEggActive = false;
+            }, 1200);
+        }
+    });
 });

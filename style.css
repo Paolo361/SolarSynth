@@ -1618,3 +1618,28 @@ html, body {
     background-color: rgba(226, 232, 240, 0.2);
     transform: translateY(1px);
 }
+
+/* ============================================================
+   EASTER EGG - Logo animation
+============================================================ */
+#easterEggLogo {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0;
+}
+
+@keyframes easterEggFade {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+}
+
+#easterEggLogo.active {
+    animation: easterEggFade 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
