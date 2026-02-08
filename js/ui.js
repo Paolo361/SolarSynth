@@ -588,34 +588,49 @@ export function setupKnobDragDrop() {
         const normalizedValue = getNormalizedChartValue(chartSource, index);
         if (normalizedValue === null) return;
 
-        const knobElement = document.getElementById(knobId);
-        if (!knobElement) return;
-
-        window.knobAngles = window.knobAngles || {};
-        const minAngle = -135;
-        const maxAngle = 135;
-        const targetAngle = minAngle + (normalizedValue / 100) * (maxAngle - minAngle);
-
-        // Direct assignment without easing to ensure full range is covered
-        window.knobAngles[knobId] = targetAngle;
-        knobElement.style.transform = `rotate(${targetAngle}deg)`;
+        const targetValue = normalizedValue / 100;
         
-        // Update value display
-        const parent = knobElement.closest('.effect-param');
-        if (parent) {
-            let valueEl = parent.querySelector('.param-value');
-            if (valueEl) {
-                // Calculate value from normalized percentage (0-100 to 0-1)
-                const value = normalizedValue / 100;
-                
-                // Use stored formatter if available
-                if (window.knobFormatters && window.knobFormatters[knobId]) {
-                    valueEl.textContent = window.knobFormatters[knobId](value);
-                } else {
-                    valueEl.textContent = Math.round(value * 100) + '%';
+        // Cancel any existing animation for this knob
+        window.knobAnimations = window.knobAnimations || {};
+        if (window.knobAnimations[knobId]) {
+            cancelAnimationFrame(window.knobAnimations[knobId]);
+        }
+        
+        // Get current value - track it globally
+        window.knobCurrentValues = window.knobCurrentValues || {};
+        const currentValue = window.knobCurrentValues[knobId] !== undefined ? window.knobCurrentValues[knobId] : 0;
+        
+        // Animation duration (ms)
+        const duration = 300;
+        const startTime = performance.now();
+        
+        const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(1, elapsed / duration);
+            
+            // Smooth easing: ease-out-cubic
+            const easeProgress = 1 - Math.pow(1 - progress, 3);
+            
+            // Interpolate between current and target value
+            const interpolatedValue = currentValue + (targetValue - currentValue) * easeProgress;
+            
+            if (window.setKnobValue && window.setKnobValue[knobId]) {
+                window.setKnobValue[knobId](interpolatedValue);
+                window.knobCurrentValues[knobId] = interpolatedValue;
+            }
+            
+            if (progress < 1) {
+                window.knobAnimations[knobId] = requestAnimationFrame(animate);
+            } else {
+                // Ensure final value is exact
+                if (window.setKnobValue && window.setKnobValue[knobId]) {
+                    window.setKnobValue[knobId](targetValue);
+                    window.knobCurrentValues[knobId] = targetValue;
                 }
             }
-        }
+        };
+        
+        window.knobAnimations[knobId] = requestAnimationFrame(animate);
     }
 
     // Setup chart drag listeners
