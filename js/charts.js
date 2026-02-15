@@ -345,14 +345,22 @@ function processMovingDotForIndex(idx, time) {
                             maxY = numericYs.length ? Math.max(...numericYs) : 100;
                         }
 
-                        let midi = 48;
+                        // Get visible MIDI range from keyboard
+                        let midiStart = 48, midiEnd = 83;
+                        if (window.getVisibleMidiRange) {
+                            const range = window.getVisibleMidiRange();
+                            midiStart = range.start;
+                            midiEnd = range.end;
+                        }
+                        
+                        let midi = midiStart;
                         if (maxY !== minY) {
                             const ratio = (yVal - minY) / (maxY - minY);
-                            midi = Math.round(48 + ratio * (83 - 48));
-                            midi = Math.max(48, Math.min(83, midi));
+                            midi = Math.round(midiStart + ratio * (midiEnd - midiStart));
+                            midi = Math.max(midiStart, Math.min(midiEnd, midi));
                         }
 
-                        console.log('Computed MIDI:', midi, 'from value:', yVal, 'range:', minY, maxY);
+                        console.log('Computed MIDI:', midi, 'from value:', yVal, 'range:', minY, maxY, 'MIDI range:', midiStart, '-', midiEnd);
 
                         const keyboard = document.getElementById('verticalKeyboard');
                         if (keyboard) {
@@ -588,6 +596,7 @@ function ensurePreviewChart() {
     window.chartPreview = chartPreview;
     
     setupPreviewKeyboardSync();
+    setupPreviewZoomControls();
 }
 
 function syncPreviewHeight() {
@@ -636,6 +645,24 @@ function setupPreviewKeyboardSync() {
         });
         __kbPreviewRO.observe(kbCont);
     } catch (e) {}
+}
+
+function setupPreviewZoomControls() {
+    const canvas = document.getElementById('chartPreview');
+    if (!canvas || canvas.__kbZoomBound) return;
+
+    canvas.addEventListener('wheel', (e) => {
+        if (typeof window.adjustKeyboardKeyCount !== 'function') return;
+        e.preventDefault();
+
+        const step = e.deltaY < 0 ? -1 : 1;
+        window.adjustKeyboardKeyCount(step);
+        if (window.chartPreview) {
+            try { window.chartPreview.update('none'); } catch (err) {}
+        }
+    }, { passive: false });
+
+    canvas.__kbZoomBound = true;
 }
 
 function setSelectedChart(source) {

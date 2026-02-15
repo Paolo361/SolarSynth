@@ -526,6 +526,22 @@
     flex: 1;
 }
 
+.midi-controls-row {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.midi-control-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.midi-control-col select {
+    flex: 1;
+}
+
 .control-subtitle {
     font-family: 'Space Mono', monospace;
     font-size: 12px;

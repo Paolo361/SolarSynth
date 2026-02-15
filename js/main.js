@@ -2,7 +2,7 @@ console.log('Solar Synth - Inizializzazione...');
 
 import { initCharts, startTransport, stopTransport, resetTransport, registerChartPlugins } from './charts.js';
 import { ensureToneStarted, initAudioUI, metronomeEnabled, audioState } from './audio.js';
-import { initKeyboard, triggerPlayWithFallback } from './keyboard.js';
+import { initKeyboard, triggerPlayWithFallback, getVisibleMidiRange, adjustKeyboardKeyCount } from './keyboard.js';
 import { initMidiUI } from './midi.js';
 import { initRecorderUI } from './recorder.js';
 import { initUI } from './ui.js';
@@ -30,6 +30,8 @@ window.addEventListener('DOMContentLoaded', async () => {
         window.stopTransport = stopTransport;
         window.resetTransport = resetTransport;
         window.triggerPlayWithFallback = triggerPlayWithFallback;
+        window.getVisibleMidiRange = getVisibleMidiRange;
+        window.adjustKeyboardKeyCount = adjustKeyboardKeyCount;
         
         // Import audio module and create mutable proxy
         const audioModule = await import('./audio.js');

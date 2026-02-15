@@ -320,7 +320,7 @@ export function initUI() {
 
         const sensitivity = 2;
         const minBpm = 40;
-        const maxBpm = 240;
+        const maxBpm = 500;
 
         const bpmToMs = (bpm) => Math.round(60000 / bpm);
         const msToBpm = (ms) => Math.round(60000 / ms);
@@ -432,6 +432,45 @@ export function initUI() {
                 document.body.style.cursor = 'default';
                 if (speedValue) {
                     setTimeout(() => speedValue.classList.remove('visible'), 1500);
+                }
+            }
+        });
+
+        // Setup drag-drop for BPM speed knob
+        speedKnobControl.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+            speedKnobControl.classList.add('drag-over');
+        });
+
+        speedKnobControl.addEventListener('dragleave', (e) => {
+            speedKnobControl.classList.remove('drag-over');
+        });
+
+        speedKnobControl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            speedKnobControl.classList.remove('drag-over');
+            
+            const chartSource = e.dataTransfer.getData('text/plain');
+            if (!chartSource) return;
+            
+            // Store BPM assignment
+            window.bpmAssignment = chartSource;
+            console.log('✅ BPM assigned to:', chartSource);
+        });
+
+        // Right-click to remove BPM automation
+        speedKnobControl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            
+            if (window.bpmAssignment) {
+                const contextMenu = document.getElementById('knobContextMenu');
+                if (contextMenu) {
+                    // Mark that we're removing BPM assignment
+                    contextMenu.dataset.removeBpm = 'true';
+                    contextMenu.style.left = `${e.pageX}px`;
+                    contextMenu.style.top = `${e.pageY}px`;
+                    contextMenu.style.display = 'block';
                 }
             }
         });
@@ -652,6 +691,16 @@ export function setupKnobDragDrop() {
                 }
             });
             
+            // Highlight BPM knob
+            const speedKnobControl = document.getElementById('speedKnobControl');
+            if (speedKnobControl) {
+                if (!window.bpmAssignment || window.bpmAssignment !== draggedChart) {
+                    speedKnobControl.classList.add('glow-available');
+                } else {
+                    speedKnobControl.classList.add('glow-assigned');
+                }
+            }
+            
             // Show filter drop overlay
             const filterOverlay = document.getElementById('filterDropOverlay');
             if (filterOverlay) {
@@ -675,10 +724,11 @@ export function setupKnobDragDrop() {
                 knob.classList.remove('glow-assigned');
             });
             
-            // Hide filter drop overlay
-            const filterOverlay = document.getElementById('filterDropOverlay');
-            if (filterOverlay) {
-                filterOverlay.classList.remove('active');
+            // Remove glow from BPM knob
+            const speedKnobControl = document.getElementById('speedKnobControl');
+            if (speedKnobControl) {
+                speedKnobControl.classList.remove('glow-available');
+                speedKnobControl.classList.remove('glow-assigned');
             }
             
             // Remove glow from spectrum canvas
@@ -846,7 +896,16 @@ export function setupKnobDragDrop() {
     // Handle remove control button
     if (removeControlItem) {
         removeControlItem.addEventListener('click', () => {
-            if (contextMenuKnob) {
+            const contextMenu = document.getElementById('knobContextMenu');
+            const isBpmRemoval = contextMenu && contextMenu.dataset.removeBpm === 'true';
+            
+            if (isBpmRemoval) {
+                // Remove BPM assignment
+                delete window.bpmAssignment;
+                console.log('❌ BPM automation removed');
+                if (contextMenu) contextMenu.dataset.removeBpm = 'false';
+            } else if (contextMenuKnob) {
+                // Remove effect knob assignment
                 const knobElement = document.getElementById(contextMenuKnob);
                 if (knobElement) {
                     const effectParam = knobElement.closest('.effect-param');
@@ -893,8 +952,52 @@ export function setupKnobDragDrop() {
         if (window.filterHandleAssignments.lp) {
             updateFilterFromChart('lp', window.filterHandleAssignments.lp, index);
         }
+        
+        // Update BPM if assigned
+        if (window.bpmAssignment) {
+            updateBpmFromChart(window.bpmAssignment, index);
+        }
     };
     
+    function updateBpmFromChart(chartSource, index) {
+        if (typeof index === 'undefined' || index === null) {
+            index = window.highlightIndex || 0;
+        }
+        if (index < 0) return;
+
+        const normalizedValue = getNormalizedChartValue(chartSource, index);
+        if (normalizedValue === null) return;
+
+        const minBpm = 40;
+        const maxBpm = 500;
+        const newBpm = Math.round(minBpm + (normalizedValue / 100) * (maxBpm - minBpm));
+        
+        const msToBpm = (ms) => Math.round(60000 / ms);
+        const bpmToMs = (bpm) => Math.round(60000 / bpm);
+        const newMs = bpmToMs(newBpm);
+        
+        // Update speedKnobControl rotation
+        const speedKnobControl = document.getElementById('speedKnobControl');
+        if (speedKnobControl) {
+            const normalized = (newBpm - minBpm) / (maxBpm - minBpm);
+            const angle = -135 + (normalized * 270);
+            speedKnobControl.style.transform = `rotate(${angle}deg)`;
+        }
+        
+        // Update speedValue display
+        const speedValue = document.getElementById('speedValue');
+        if (speedValue) {
+            speedValue.textContent = `${newBpm} BPM`;
+        }
+        
+        // Update Tone Transport BPM
+        if (typeof Tone !== 'undefined' && Tone.Transport) {
+            Tone.Transport.bpm.value = newBpm;
+        }
+        
+        console.log('🎼 BPM updated to:', newBpm);
+    }
+
     function updateFilterFromChart(filterType, chartSource, index) {
         if (typeof index === 'undefined' || index === null) {
             index = window.highlightIndex || 0;

@@ -1,6 +1,7 @@
 export let midiOutput = null;
 export let midiEnabled = false;
 export let currentMidiNote = null;
+export let midiChannel = 0;
 
 export async function initMidiAccess() {
     try {
@@ -93,21 +94,21 @@ export function playMidiNote(midiNumber) {
     }
     
     if (currentMidiNote !== null && currentMidiNote !== midiNumber) {
-        sendMidiNoteOff(currentMidiNote);
+        sendMidiNoteOff(currentMidiNote, midiChannel);
     }
     
     console.log('✅ Sending MIDI Note On:', midiNumber);
-    sendMidiNoteOn(midiNumber, 100);
+    sendMidiNoteOn(midiNumber, 100, midiChannel);
 }
 
 export function stopMidiNote() {
     if (currentMidiNote !== null) {
-        sendMidiNoteOff(currentMidiNote);
+        sendMidiNoteOff(currentMidiNote, midiChannel);
         currentMidiNote = null;
     }
 }
 
-export function sendAllNotesOff(channel = 0) {
+export function sendAllNotesOff(channel = midiChannel) {
     if (!midiOutput) return;
     try {
         midiOutput.send([0xB0 + channel, 123, 0]);
@@ -129,6 +130,12 @@ export function setMidiEnabled(enabled) {
     midiEnabled = enabled;
 }
 
+export function setMidiChannel(channel) {
+    const ch = Number(channel);
+    if (!Number.isFinite(ch)) return;
+    midiChannel = Math.max(0, Math.min(15, Math.round(ch)));
+}
+
 export async function initMidiUI() {
     try {
         const midiAccess = await initMidiAccess();
@@ -136,6 +143,7 @@ export async function initMidiUI() {
         
         const selectEl = document.getElementById('midiOutputSelect');
         const statusEl = document.getElementById('midiStatus');
+        const channelEl = document.getElementById('midiChannelSelect');
         
         if (selectEl) {
             selectEl.addEventListener('change', (e) => {
@@ -160,6 +168,12 @@ export async function initMidiUI() {
                     if (statusEl) statusEl.textContent = 'MIDI: nessun dispositivo selezionato';
                     stopMidiNote();
                 }
+            });
+        }
+
+        if (channelEl) {
+            channelEl.addEventListener('change', (e) => {
+                setMidiChannel(e.target.value);
             });
         }
         
