@@ -49,3 +49,49 @@ export function msToBpm(ms) {
 export function bpmToMs(bpm) {
     return Math.round(60000 / bpm);
 }
+
+/**
+ * Rileva e corregge le anomalie nei dati di velocità
+ * Sostituisce valori anomali con il valore precedente valido
+ * mantenendo i valori originali per il tooltip
+ * 
+ * @param {number[]} data - Array dei dati
+ * @param {number} threshold - Percentuale minima di variazione rispetto a media (default: 0.15 = 15%)
+ * @returns {object} {corrected: [...], originals: [...], anomalyIndices: [...]}
+ */
+export function removeVelocityAnomalies(data, threshold = 0.15) {
+    if (!data || data.length < 3) return { corrected: data, originals: data, anomalyIndices: [] };
+    
+    const originals = [...data];
+    const corrected = [...data];
+    const anomalyIndices = [];
+    
+    // Calcola media e deviazione standard
+    const mean = data.reduce((a, b) => a + b, 0) / data.length;
+    const variance = data.reduce((a, b) => a + (b - mean) ** 2, 0) / data.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // Usa deviazione standard per identificare outlier
+    // Un valore è anomalo se è minore di (mean - 2*stdDev) 
+    // oppure se è < threshold% della media circostante
+    const lowerBound = Math.max(mean - 2 * stdDev, mean * 0.1);
+    
+    let lastValidValue = data[0];
+    
+    for (let i = 0; i < data.length; i++) {
+        const val = data[i];
+        
+        // Verifica se il valore è un'anomalia
+        const isAnomaly = val < lowerBound || (i > 0 && val < lastValidValue * threshold);
+        
+        if (isAnomaly) {
+            corrected[i] = lastValidValue;
+            anomalyIndices.push(i);
+            console.warn(`🚨 Anomalia rilevata a indice ${i}: ${val} → sostituito con ${lastValidValue}`);
+        } else {
+            lastValidValue = val;
+        }
+    }
+    
+    return { corrected, originals, anomalyIndices };
+}

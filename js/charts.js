@@ -1,4 +1,4 @@
-import { resolveColorToRgba, COLOR_MAP, interpolateLinear } from './utils.js';
+import { resolveColorToRgba, COLOR_MAP, interpolateLinear, removeVelocityAnomalies } from './utils.js';
 
 // Track last data timestamp for new data detection
 let lastDataTimestamp = 0;
@@ -448,11 +448,19 @@ export async function updateCharts() {
         const vel = ptsUsed.map(p => p.vel);
         const temp = ptsUsed.map(p => p.temp);
         
+        // Applica filtraggio anomalie ai dati di velocità
+        const { corrected: velCorrected, originals: velOriginals, anomalyIndices } = removeVelocityAnomalies(vel);
+        
         window.originalDataXs = xs;
         window.originalDataTemp = temp;
         window.originalDataDens = dens;
-        window.originalDataVel = vel;
+        window.originalDataVel = velOriginals;  // Mantieni i valori originali per il tooltip
+        window.velocityCorrected = velCorrected;  // Usa i valori corretti per il grafico
         window.originalDataYs = temp;
+        
+        if (anomalyIndices.length > 0) {
+            console.log(`✓ Filtrate ${anomalyIndices.length} anomalie nel grafico di velocità`);
+        }
         
         // Check for new data and trigger pulse effect
         if (xs.length > 0) {
@@ -491,7 +499,7 @@ export async function updateCharts() {
         
         const tempInterp = interpolateLinear(xs, temp, newXs);
         const densInterp = interpolateLinear(xs, dens, newXs);
-        const velInterp = interpolateLinear(xs, vel, newXs);
+        const velInterp = interpolateLinear(xs, velCorrected, newXs);
         
         originalPointIndices = [];
         for (let i = 0; i < xs.length; i++) {
