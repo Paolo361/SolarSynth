@@ -450,6 +450,11 @@ export function initUI() {
         speedKnobControl.addEventListener('drop', (e) => {
             e.preventDefault();
             speedKnobControl.classList.remove('drag-over');
+
+            const filterOverlay = document.getElementById('filterDropOverlay');
+            if (filterOverlay) {
+                filterOverlay.classList.remove('active');
+            }
             
             const chartSource = e.dataTransfer.getData('text/plain');
             if (!chartSource) return;
@@ -568,6 +573,35 @@ export function setupKnobDragDrop() {
     const chartBoxes = document.querySelectorAll('[data-chart-source]');
     const contextMenu = document.getElementById('knobContextMenu');
     const removeControlItem = document.getElementById('removeControl');
+
+    function clearDragVisualState() {
+        const filterOverlay = document.getElementById('filterDropOverlay');
+        if (filterOverlay) {
+            filterOverlay.classList.remove('active');
+        }
+
+        const allKnobs = document.querySelectorAll('.effect-knob, .knob');
+        allKnobs.forEach(knob => {
+            knob.classList.remove('glow-available');
+            knob.classList.remove('glow-assigned');
+            knob.classList.remove('drag-over');
+        });
+
+        const speedKnobControl = document.getElementById('speedKnobControl');
+        if (speedKnobControl) {
+            speedKnobControl.classList.remove('glow-available');
+            speedKnobControl.classList.remove('glow-assigned');
+            speedKnobControl.classList.remove('drag-over');
+        }
+
+        const spectrumCanvas = document.getElementById('spectrumCanvas');
+        if (spectrumCanvas) {
+            spectrumCanvas.classList.remove('glow-available');
+            spectrumCanvas.classList.remove('drag-over');
+        }
+
+        chartBoxes.forEach(box => box.classList.remove('dragging'));
+    }
     
     function updateKnobVisual(knobElement, chartSource) {
         const effectParam = knobElement.closest('.effect-param');
@@ -717,27 +751,18 @@ export function setupKnobDragDrop() {
         box.addEventListener('dragend', (e) => {
             box.classList.remove('dragging');
             draggedChart = null;
-            
-            const allKnobs = document.querySelectorAll('.effect-knob, .knob');
-            allKnobs.forEach(knob => {
-                knob.classList.remove('glow-available');
-                knob.classList.remove('glow-assigned');
-            });
-            
-            // Remove glow from BPM knob
-            const speedKnobControl = document.getElementById('speedKnobControl');
-            if (speedKnobControl) {
-                speedKnobControl.classList.remove('glow-available');
-                speedKnobControl.classList.remove('glow-assigned');
-            }
-            
-            // Remove glow from spectrum canvas
-            const spectrumCanvas = document.getElementById('spectrumCanvas');
-            if (spectrumCanvas) {
-                spectrumCanvas.classList.remove('glow-available');
-                spectrumCanvas.classList.remove('drag-over');
-            }
+            clearDragVisualState();
         });
+    });
+
+    document.addEventListener('dragend', () => {
+        draggedChart = null;
+        clearDragVisualState();
+    });
+
+    document.addEventListener('drop', () => {
+        draggedChart = null;
+        clearDragVisualState();
     });
 
     // Setup knob drop listeners
@@ -758,6 +783,11 @@ export function setupKnobDragDrop() {
             knob.classList.remove('drag-over');
             knob.classList.remove('glow-available');
             knob.classList.remove('glow-assigned');
+
+            const filterOverlay = document.getElementById('filterDropOverlay');
+            if (filterOverlay) {
+                filterOverlay.classList.remove('active');
+            }
             
             const chartSource = e.dataTransfer.getData('text/plain');
             const knobId = knob.id;
@@ -802,6 +832,11 @@ export function setupKnobDragDrop() {
             e.preventDefault();
             spectrumCanvas.classList.remove('drag-over');
             spectrumCanvas.classList.remove('glow-available');
+
+            const filterOverlay = document.getElementById('filterDropOverlay');
+            if (filterOverlay) {
+                filterOverlay.classList.remove('active');
+            }
             
             const chartSource = e.dataTransfer.getData('text/plain');
             if (!chartSource) return;

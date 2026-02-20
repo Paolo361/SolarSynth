@@ -454,7 +454,8 @@ export async function updateCharts() {
         window.originalDataXs = xs;
         window.originalDataTemp = temp;
         window.originalDataDens = dens;
-        window.originalDataVel = velOriginals;  // Mantieni i valori originali per il tooltip
+        //window.originalDataVel = velOriginals;  // Mantieni i valori originali per il tooltip
+        window.originalDataVel = velCorrected;  // versione provvisoria, in attesa di decidere se mostrare o meno le anomalie nei tooltip
         window.velocityCorrected = velCorrected;  // Usa i valori corretti per il grafico
         window.originalDataYs = temp;
         
